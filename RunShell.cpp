@@ -373,207 +373,128 @@ int main() {
 	/* OPTIMIZATION *** OPTIMIZATION *** OPTIMIZATION *** OPTIMIZATION *** */
 	/* ******************************************************************* */
 
-	// /* Calculate the initial energy and output it */
-	// std::cout.precision(15);
-	// std::cout << "\tThe initial bending energy is " << lattice.bendingEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
-	// std::cout << "\tThe initial stretching energy is " << lattice.stretchingEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
-	// std::cout << "\tThe initial connection energy is " << lattice.connectionEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
-
-
-
-	// /* The size of the optimization problem */
-	// int size = lattice.SizeOfOptimizationProblem();
-
-	// /* define the minimizer: we work with BFGS */
-	// // const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_vector_bfgs;
-	// const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_conjugate_fr;
-	// // const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_vector_bfgs2;
-
-	// // const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_steepest_descent;
-	// gsl_multimin_fdfminimizer*      optimizer = gsl_multimin_fdfminimizer_alloc (method, size);
-
-	// /* Define the function to be minimized */
-	// gsl_multimin_function_fdf my_func;
-	// my_func.n      = size;
-	// my_func.f      = &my_f;
-	// my_func.df     = &my_df;
-	// my_func.fdf    = &my_fdf;
-	// my_func.params = static_cast<void *>(&lattice);
-
-	// /* construct the initial state */
-	// gsl_vector *IC;
-	// IC = gsl_vector_alloc(size);
-	// lattice.getPositionVector(IC);
-
-	// /* set paramters of optimizer */
-	// // gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.01, 1e-6);
-	// gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.001 , 1e-6 );
-
-
-	// /* the optimization loop */
-	// int status;
-	// int print_counter=0;
-	// for (int iter=0; iter<NumberOfLoops; iter++)
-	// {
-	// 	/* set the adjustment parameters */
-	// 	double thicknessAdjustSign = 1.0;
-	// 	if (ThicknessAdjust < 1.0)	{thicknessAdjustSign = -1.0;}
-	// 	// double adjustParamThickness	= 1.0 + (ThicknessAdjust - 1.0) * pow((1.0 - 5.0 * iter / NumberOfLoops),3);
-	// 	double adjustParamThickness	= ThicknessAdjust + (1.0 - ThicknessAdjust) * pow(5.0 * iter / NumberOfLoops,3);
-	// 	/*double adjustParamThickness	= ThicknessAdjust + (1.0 - ThicknessAdjust) * 0.5*(1 + sin(3.141592*(5.0 * iter / NumberOfLoops) - 0.727)/abs(sin(3.141592*(5.0 * iter / NumberOfLoops) - 0.727))); */
-	// 	// double adjustParamThickness	= pow(ThicknessAdjust + (1.0 - ThicknessAdjust) * iter / NumberOfLoops,-2);//adjust wgal then calibrate
-	// 	if (adjustParamThickness*thicknessAdjustSign < thicknessAdjustSign)	{adjustParamThickness = 1.0;}
-	// 	double adjustParamMetric	= 1.0 + (MetricAdjust - 1.0) * (1.0 - 1.0 * iter / NumberOfLoops);
-	// 	if (adjustParamMetric < 1)		{adjustParamMetric = 1.0;}
-	// 	lattice.setAdjust(adjustParamThickness, adjustParamMetric);
-		
-	// 	// double adjustParamThickness = ThicknessAdjust + (1.0 - ThicknessAdjust) * pow(5.0 * iter / NumberOfLoops,3);
-	// 	// double adjustParamMetric = 1.0 + (MetricAdjust - 1.0) * (1.0 - 1.0 * iter / NumberOfLoops);
-	// 	// if (adjustParamMetric < 1.0) adjustParamMetric = 1.0;
-	// 	// lattice.setAdjust(adjustParamThickness, adjustParamMetric);
-		
-	// 	// if (iter % HowOftenToPrint == 0) {
-    // 	// 	std::cout << "iter " << iter
-    //     //       << ": adjustThickness=" << adjustParamThickness
-    //     //       << ", adjustMetric=" << adjustParamMetric
-    //     //       << ", stretching=" << lattice.stretchingEnergy()
-    //     //       << ", bending=" << lattice.bendingEnergy()
-    //     //       << ", connection=" << lattice.connectionEnergy()
-    //     //       << ", total=" << (lattice.stretchingEnergy() + lattice.bendingEnergy() + lattice.connectionEnergy())
-    //     //       << std::endl;
-	// 	// }
-
-
-
-	// 	// Temporary fixed adjustment parameters
-	// 	// double adjustParamThickness = 1.0;
-	// 	// double adjustParamMetric = 1.0;
-	// 	/* perform an iteration */
-	// 	status = gsl_multimin_fdfminimizer_iterate(optimizer);
-	// 	// if (status == GSL_ENOPROG) {
-	// 	// 	std::cout << "Line search stagnated at iter " << iter << " — exiting\n";
-	// 	// 	break;
-	// 	// } else if (status) {
-	// 	// 	std::cerr << "Optimization stopped: " << gsl_strerror(status) << std::endl;
-	// 	// 	break;
-	// 	// }
-
-
-	// 	// if (!status) {
-	// 	// // update the shell to the new x
-	// 	// double* currentX = gsl_vector_ptr(optimizer->x, 0);
-	// 	// lattice.setPositionVector(currentX);
-		
-	// 	// }
-	// 	if (status)
-	// 	{
-	// 		if (((ThicknessAdjust == 1.0) && (MetricAdjust == 1.0)) || ((5.0 * iter / NumberOfLoops) > 1.0)) /*Allow exit only after 1/5 of maximum number of iterations (if adjusted)*/
-	// 		{
-	// 			// std::cout << "Exit minimizer with status " << status << std::endl;
-	// 			std::cout << "Exit minimizer with status " << status
-	// 			<< " (" << gsl_strerror(status) << ")\n";
-
-	// 			break;
-	// 		}
-			
-	// 	}
-	// 	// // 		// — pull the optimizer’s current x-vector back into the lattice —
-	// 	// {
-	// 	// 	double* currentX = gsl_vector_ptr(optimizer->x, 0);
-	// 	// 	lattice.setPositionVector(currentX);
-	// 	// }
-
-	// 	/* check the size of the gradient */
-	// 	status = gsl_multimin_test_gradient(optimizer->gradient, 1e-6);
-	// 	if (status == GSL_SUCCESS)
-	// 	{
-	// 		if (((ThicknessAdjust == 1.0) && (MetricAdjust == 1.0)) ||((5.0 * iter / NumberOfLoops) > 1.0)) /*Allow exit only after 1/5 of maximum number of iterations (if adjusted)*/
-	// 		{
-	// 			std::cout << "Minimum found" << std::endl;
-	// 			break;
-	// 		}
-	// 	}
 	/* Calculate the initial energy and output it */
-    //
-	    std::cout.precision(15);
-    std::cout << "\tThe initial bending energy is   "
-              << lattice.bendingEnergy() << "\n";
-    std::cout << "\tThe initial stretching energy is "
-              << lattice.stretchingEnergy() << "\n";
-    std::cout << "\tThe initial connection energy is "
-              << lattice.connectionEnergy() << "\n";
+	std::cout.precision(15);
+	std::cout << "\tThe initial bending energy is " << lattice.bendingEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
+	std::cout << "\tThe initial stretching energy is " << lattice.stretchingEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
+	std::cout << "\tThe initial connection energy is " << lattice.connectionEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
 
-    //
-    // ——— SET UP OPTIMIZER ———
-    //
-    int size = lattice.SizeOfOptimizationProblem();
-    // std::cout << "Number of free DOFs = " << size << "\n";       // sanity check
 
-    const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_conjugate_fr;
-	// const auto* method = gsl_multimin_fdfminimizer_vector_bfgs2;
 
-    gsl_multimin_fdfminimizer* optimizer = gsl_multimin_fdfminimizer_alloc(method, size);
+	/* The size of the optimization problem */
+	int size = lattice.SizeOfOptimizationProblem();
 
-    gsl_multimin_function_fdf my_func;
-    my_func.n      = size;
-    my_func.f      = &my_f;
-    my_func.df     = &my_df;
-    my_func.fdf    = &my_fdf;
-    my_func.params = static_cast<void*>(&lattice);
+	/* define the minimizer: we work with BFGS */
+	// const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_vector_bfgs;
+	const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_conjugate_fr;
+	// const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_vector_bfgs2;
 
-    gsl_vector* state = gsl_vector_alloc(size);
-    lattice.getPositionVector(state);
+	// const gsl_multimin_fdfminimizer_type* method = gsl_multimin_fdfminimizer_steepest_descent;
+	gsl_multimin_fdfminimizer*      optimizer = gsl_multimin_fdfminimizer_alloc (method, size);
 
-    // you can try a larger initial step, e.g. 0.1
-    gsl_multimin_fdfminimizer_set(optimizer, &my_func, state, 0.1, 1e-6);
+	/* Define the function to be minimized */
+	gsl_multimin_function_fdf my_func;
+	my_func.n      = size;
+	my_func.f      = &my_f;
+	my_func.df     = &my_df;
+	my_func.fdf    = &my_fdf;
+	my_func.params = static_cast<void *>(&lattice);
 
-    //
-    // ——— OPTIMIZATION LOOP ———
-    //
-    int print_counter = 0;
-    for (int iter = 0; iter < NumberOfLoops; ++iter) {
-        // — debug tick —
-        // std::cout << "[debug] starting iter " << iter << "\n";
+	/* construct the initial state */
+	gsl_vector *IC;
+	IC = gsl_vector_alloc(size);
+	lattice.getPositionVector(IC);
 
-        // 1) update adjustment parameters
-        double adjustParamThickness = ThicknessAdjust
-            + (1.0 - ThicknessAdjust) * pow(5.0 * iter / NumberOfLoops, 3);
-        if (adjustParamThickness < 1.0) adjustParamThickness = 1.0;
+	/* set paramters of optimizer */
+	// gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.01, 1e-6);
+	gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.001 , 1e-6 );
 
-        double adjustParamMetric = 1.0
-            + (MetricAdjust - 1.0) * (1.0 - double(iter) / NumberOfLoops);
-        if (adjustParamMetric < 1.0) adjustParamMetric = 1.0;
 
-        lattice.setAdjust(adjustParamThickness, adjustParamMetric);
+	/* the optimization loop */
+	int status;
+	int print_counter=0;
+	for (int iter=0; iter<NumberOfLoops; iter++)
+	{
+		/* set the adjustment parameters */
+		double thicknessAdjustSign = 1.0;
+		if (ThicknessAdjust < 1.0)	{thicknessAdjustSign = -1.0;}
+		// double adjustParamThickness	= 1.0 + (ThicknessAdjust - 1.0) * pow((1.0 - 5.0 * iter / NumberOfLoops),3);
+		double adjustParamThickness	= ThicknessAdjust + (1.0 - ThicknessAdjust) * pow(5.0 * iter / NumberOfLoops,3);
+		/*double adjustParamThickness	= ThicknessAdjust + (1.0 - ThicknessAdjust) * 0.5*(1 + sin(3.141592*(5.0 * iter / NumberOfLoops) - 0.727)/abs(sin(3.141592*(5.0 * iter / NumberOfLoops) - 0.727))); */
+		// double adjustParamThickness	= pow(ThicknessAdjust + (1.0 - ThicknessAdjust) * iter / NumberOfLoops,-2);//adjust wgal then calibrate
+		if (adjustParamThickness*thicknessAdjustSign < thicknessAdjustSign)	{adjustParamThickness = 1.0;}
+		double adjustParamMetric	= 1.0 + (MetricAdjust - 1.0) * (1.0 - 1.0 * iter / NumberOfLoops);
+		if (adjustParamMetric < 1)		{adjustParamMetric = 1.0;}
+		lattice.setAdjust(adjustParamThickness, adjustParamMetric);
+		
+		// double adjustParamThickness = ThicknessAdjust + (1.0 - ThicknessAdjust) * pow(5.0 * iter / NumberOfLoops,3);
+		// double adjustParamMetric = 1.0 + (MetricAdjust - 1.0) * (1.0 - 1.0 * iter / NumberOfLoops);
+		// if (adjustParamMetric < 1.0) adjustParamMetric = 1.0;
+		// lattice.setAdjust(adjustParamThickness, adjustParamMetric);
+		
+		// if (iter % HowOftenToPrint == 0) {
+    	// 	std::cout << "iter " << iter
+        //       << ": adjustThickness=" << adjustParamThickness
+        //       << ", adjustMetric=" << adjustParamMetric
+        //       << ", stretching=" << lattice.stretchingEnergy()
+        //       << ", bending=" << lattice.bendingEnergy()
+        //       << ", connection=" << lattice.connectionEnergy()
+        //       << ", total=" << (lattice.stretchingEnergy() + lattice.bendingEnergy() + lattice.connectionEnergy())
+        //       << std::endl;
+		// }
 
-        
-        // — copy optimizer’s new x back into the lattice —
-        int status = gsl_multimin_fdfminimizer_iterate(optimizer);
 
-		if (status == GSL_ENOPROG) {
-			std::cerr << "[warning] line search stagnated at iter " << iter << "\n";
-			// let it try again at the next iteration, don’t break!
+
+		// Temporary fixed adjustment parameters
+		// double adjustParamThickness = 1.0;
+		// double adjustParamMetric = 1.0;
+		/* perform an iteration */
+		status = gsl_multimin_fdfminimizer_iterate(optimizer);
+		// if (status == GSL_ENOPROG) {
+		// 	std::cout << "Line search stagnated at iter " << iter << " — exiting\n";
+		// 	break;
+		// } else if (status) {
+		// 	std::cerr << "Optimization stopped: " << gsl_strerror(status) << std::endl;
+		// 	break;
+		// }
+
+
+		// if (!status) {
+		// // update the shell to the new x
+		// double* currentX = gsl_vector_ptr(optimizer->x, 0);
+		// lattice.setPositionVector(currentX);
+		
+		// }
+		if (status)
+		{
+			if (((ThicknessAdjust == 1.0) && (MetricAdjust == 1.0)) || ((5.0 * iter / NumberOfLoops) > 1.0)) /*Allow exit only after 1/5 of maximum number of iterations (if adjusted)*/
+			{
+				// std::cout << "Exit minimizer with status " << status << std::endl;
+				std::cout << "Exit minimizer with status " << status
+				<< " (" << gsl_strerror(status) << ")\n";
+
+				break;
+			}
+			
 		}
-		else if (status != GSL_SUCCESS) {
-			std::cerr << "[error] minimizer stopped: "
-					<< gsl_strerror(status) << "\n";
-			break;
-		}
+		// // 		// — pull the optimizer’s current x-vector back into the lattice —
+		// {
+		// 	double* currentX = gsl_vector_ptr(optimizer->x, 0);
+		// 	lattice.setPositionVector(currentX);
+		// }
 
-		// now test convergence
+		/* check the size of the gradient */
 		status = gsl_multimin_test_gradient(optimizer->gradient, 1e-6);
-		if (status == GSL_SUCCESS) {
-			std::cout << "Minimum found at iter " << iter << "\n";
-			break;
+		if (status == GSL_SUCCESS)
+		{
+			if (((ThicknessAdjust == 1.0) && (MetricAdjust == 1.0)) ||((5.0 * iter / NumberOfLoops) > 1.0)) /*Allow exit only after 1/5 of maximum number of iterations (if adjusted)*/
+			{
+				std::cout << "Minimum found" << std::endl;
+				break;
+			}
 		}
+		
 
-		// lattice.setPositionVector(gsl_vector_ptr(optimizer->x, 0));
-
-        // 4) convergence test (gradient norm)
-        if (status == GSL_SUCCESS) {
-            std::cout << "Minimum found at iter " << iter << "\n";
-            break;
-        }
 		if (iter%HowOftenToPrint==0)
 		{
 		/* print the current energy and thickness */
@@ -613,29 +534,16 @@ int main() {
 
 
 	/* Set the state of the system with final state */
-	// double* ptr = gsl_vector_ptr(optimizer->x, 0);
-	// lattice.setPositionVector(ptr);
-
-	// /* free the memory */
-	// gsl_multimin_fdfminimizer_free(optimizer);
-	// gsl_vector_free(IC);
-
-	// 	/* Calculate the final energy and output it */
-	// std::cout.precision(15);
-
-	// std::cout << "The final energy is " << lattice.energy() << std::endl;
-
 	double* ptr = gsl_vector_ptr(optimizer->x, 0);
 	lattice.setPositionVector(ptr);
-	
 
-    gsl_multimin_fdfminimizer_free(optimizer);
-    gsl_vector_free(state);
+	/* free the memory */
+	gsl_multimin_fdfminimizer_free(optimizer);
+	gsl_vector_free(IC);
 
-    // final energy print
-    std::cout << "The final energy is " << lattice.energy() << "\n";
-
-
+		/* Calculate the final energy and output it */
+	std::cout.precision(15);
+	std::cout << "The final energy is " << lattice.energy() << std::endl;
 	char *space = (char*)(" ");
 	double Es = lattice.stretchingEnergy();
 	double Eb = lattice.bendingEnergy();

@@ -357,53 +357,49 @@ double Face::bendingEnergyContentDensity() const
 }
 /* ============================================================================== */
 /* Calculate connection energy density */
-double Face::connectionEnergyContentDensity() const {
+#include <iostream>    // for std::cout
+
+double Face::connectionEnergyContentDensity() const
+{
     if (m_lambdaG == 0.0 && m_muG == 0.0)
         return 0.0;
 
-    // 1) Recompute the current Γᵘ_{αβ}
-    TinyMatrix<TinyMatrix<double,2>,2> Gamma = computeConnection();
+    // 1) true Christoffel
+    auto Gamma = computeConnection();
 
-    // 2) ΔΓᵘ_{αβ} = Γᵘ_{αβ} – Γ̄ᵘ_{αβ}
+    // 2) ΔΓ = Γ – Γ̄
     TinyMatrix<TinyMatrix<double,2>,2> Delta;
-    for (int mu = 0; mu < 2; ++mu) {
-        for (int alpha = 0; alpha < 2; ++alpha) {
-            for (int beta = 0; beta < 2; ++beta) {
-                for (int j = 0; j < 2; ++j) {
-                    Delta(mu,alpha)(beta,j)
-                        = Gamma(mu,alpha)(beta,j)
-                        - m_gammabar(mu,alpha)(beta,j);
-                }
-            }
+    for (int k = 0; k < 2; ++k) {
+      for (int i = 0; i < 2; ++i) {
+        for (int j = 0; j < 2; ++j) {
+          for (int l = 0; l < 2; ++l) {
+            Delta(k,i)(j,l) = 
+              Gamma(k,i)(j,l) - m_gammabar(k,i)(j,l);
+          }
         }
+      }
     }
 
-    // 3) Build the isotropic Lamé‐type energy
-    const TinyMatrix<double,2>& abarInv = m_invabar;  // ā⁻¹
-    double W = 0.0;
-    for (int mu = 0; mu < 2; ++mu) {
-        for (int nu = 0; nu < 2; ++nu) {
-            double weight = m_abar(mu,nu);  // ā_{μν}
-            for (int a = 0; a < 2; ++a) {
-                for (int b = 0; b < 2; ++b) {
-                    for (int g = 0; g < 2; ++g) {
-                        for (int d = 0; d < 2; ++d) {
-                            // A^{abcd} = λ_G ā^{ab} ā^{gd} + μ_G (ā^{db} ā^{ga} + ā^{ag} ā^{bd})
-                            double A =
-                                m_lambdaG * (abarInv(a,b) * abarInv(g,d))
-                              + m_muG     * (abarInv(d,b) * abarInv(g,a)
-                                           + abarInv(a,g) * abarInv(b,d));
-                            double d1 = Delta(mu,a)(b,d);
-                            double d2 = Delta(nu,g)(d,b);
-                            W += weight * A * d1 * d2;
-                        }
-                    }
-                }
-            }
+    // 3) trace and Frobenius‐norm²
+    double tr = 0.0, norm2 = 0.0;
+    for (int k = 0; k < 2; ++k) {
+      for (int i = 0; i < 2; ++i) {
+        tr += Delta(k,i)(i,i);
+        for (int j = 0; j < 2; ++j) {
+          for (int l = 0; l < 2; ++l) {
+            norm2 += Delta(k,i)(j,l) * Delta(k,i)(j,l);
+          }
         }
+      }
     }
 
-    return W;
+    // // —— DEBUG OUTPUT ——
+    // std::cout << "Face @(" << m_coordinates(0) << "," << m_coordinates(1) << "):\n"
+    //           << "  trace(ΔΓ) = " << tr  << "\n"
+    //           << "  ||ΔΓ||²   = " << norm2 << "\n";
+
+    // 4) isotropic Lamé energy
+    return 0.5 * m_lambdaG * (tr * tr) +   m_muG     *  norm2;
 }
 
 
@@ -446,64 +442,49 @@ TinyMatrix<double,2> Face::computeMetric() const
 /* ============================================================================== */
 /* computeMetricDerivatives */
 std::pair<TinyMatrix<double,2>, TinyMatrix<double,2>>
-Face::computeMetricDerivatives() const {
-    if (m_lambdaG != 0.0 || m_muG != 0.0) {
+Face::computeMetricDerivatives() const
+{
+    // ——— DEBUG: print connection stiffness params instead of da/du, da/dv ———
+    // std::cout
+    //   << "DEBUG Face @ (" << m_coordinates(0) << ", " << m_coordinates(1) << "): "
+    //   << "lambdaG = " << m_lambdaG
+    //   << ", muG = "     << m_muG
+    //   << std::endl;
+    // —————————————————————————————————————————————————————————————————————————
 
-    // 1) base metric at this face
-    TinyMatrix<double,2> a0 = computeMetric();
+    // 1) make sure neighbors exist
+	
+    // assert(m_faces(0) && m_faces(1) && m_faces(2));
+	{
+    // if any neighbor is missing, just return zeros
+    if (!m_faces(0) || !m_faces(1) || !m_faces(2)) {
+        return { TinyMatrix<double,2>(), TinyMatrix<double,2>() };
+    }
+	}
 
-    // 2) classify neighbors by whether they lie mostly along u or v
-    Face *pu=nullptr, *mu=nullptr, *pv=nullptr, *mv=nullptr;
-    for (int i = 0; i < 3; ++i) {
-        Face* nbr = m_faces(i);
-        if (!nbr) continue;
-        double dx = nbr->coordinates()(0) - m_coordinates(0);
-        double dy = nbr->coordinates()(1) - m_coordinates(1);
-        if (std::fabs(dx) >= std::fabs(dy)) {
-            if (dx > 0) pu = nbr; else mu = nbr;
-        } else {
-            if (dy > 0) pv = nbr; else mv = nbr;
-        }
-    }
+    // 2) pull the metric a on the three neighbor faces
+    TinyMatrix<double,2> N0 = m_faces(0)->computeMetric();
+    TinyMatrix<double,2> N1 = m_faces(1)->computeMetric();
+    TinyMatrix<double,2> N2 = m_faces(2)->computeMetric();
 
-    TinyMatrix<double,2> da_du, da_dv;
+    // 3) compute parametric differences Δu and Δv
+    double du = m_faces(0)->coordinates()(0)
+              - m_faces(1)->coordinates()(0);
+    double dv = m_faces(0)->coordinates()(1)
+              - m_faces(2)->coordinates()(1);
+	if (fabs(du) < 1e-12 || fabs(dv) < 1e-12) {
+		// handle boundary or degenerate case…
+		return { TinyMatrix<double,2>(), TinyMatrix<double,2>() };
+	}
 
-    // 3) ∂a/∂u
-    if (pu && mu) {
-        double du = pu->coordinates()(0) - mu->coordinates()(0);
-        da_du = (pu->computeMetric() - mu->computeMetric()) * (1.0/du);
-    }
-    else if (pu) {
-        double du = pu->coordinates()(0) - m_coordinates(0);
-        da_du = (pu->computeMetric() - a0) * (1.0/du);
-    }
-    else if (mu) {
-        double du = m_coordinates(0) - mu->coordinates()(0);
-        da_du = (a0 - mu->computeMetric()) * (1.0/du);
-    }
-    else {
-        da_du.setToZero();
-    }
+    // 4) finite‐difference the metric
+    TinyMatrix<double,2> da_du = (N0 - N1) * (1.0/du);
+    TinyMatrix<double,2> da_dv = (N0 - N2) * (1.0/dv);
+	// std::cout << "du = " << du << ", dv = " << dv << std::endl;
+	// if(fabs(du) < 1e-8 || fabs(dv) < 1e-8)
+	// 	std::cerr << "Warning: Very small du/dv detected!" << std::endl;
 
-    // 4) ∂a/∂v
-    if (pv && mv) {
-        double dv = pv->coordinates()(1) - mv->coordinates()(1);
-        da_dv = (pv->computeMetric() - mv->computeMetric()) * (1.0/dv);
-    }
-    else if (pv) {
-        double dv = pv->coordinates()(1) - m_coordinates(1);
-        da_dv = (pv->computeMetric() - a0) * (1.0/dv);
-    }
-    else if (mv) {
-        double dv = m_coordinates(1) - mv->coordinates()(1);
-        da_dv = (a0 - mv->computeMetric()) * (1.0/dv);
-    }
-    else {
-        da_dv.setToZero();
-    }
-
-    return {da_du, da_dv};
-}
+    return std::make_pair(da_du, da_dv);
 }
 
 /* ============================================================================== */
@@ -557,8 +538,6 @@ TinyVector<double,3> Face::LMN() const
 */
 TinyMatrix<TinyMatrix<double,2>,2> Face::computeConnection() const {
     // 1) compute metric and its inverse
-    if (m_lambdaG != 0.0 || m_muG != 0.0) {
-
     TinyVector<double,3> ef = EFG();
     TinyMatrix<double,2> a;
     a(0,0) = ef(0);  a(0,1) = ef(1);
@@ -602,58 +581,43 @@ TinyMatrix<TinyMatrix<double,2>,2> Face::computeConnection() const {
 
     return Gamma;
 }
-}
+// Note: the original code had a commented‐out version of this function
+// that used a different indexing scheme for Gamma, which was slow.
+// The current version uses the correct indexing as per the formula above.
+// TinyMatrix<TinyMatrix<double,2>,2> Face::computeConnection() const {
+//     TinyVector<double,3> ef = EFG();  // First fundamental form
 
+//     TinyMatrix<double,2> a;
+//     a(0,0) = ef(0);  a(0,1) = ef(1);
+//     a(1,0) = ef(1);  a(1,1) = ef(2);
+//     TinyMatrix<double,2> inva = a.inverse();
 
-// -----------------------------------------------------------------------------
-// 1) implement the missing cached‐connection function
-TinyMatrix<TinyMatrix<double,2>,2>
-Face::computeConnectionCached(
-    const TinyMatrix<double,2>& a,
-    const TinyMatrix<double,2>& da_du,
-    const TinyMatrix<double,2>& da_dv
-) const {
-    // invert once
-    TinyMatrix<double,2> inva = a.inverse();
-    const double i00 = inva(0,0), i01 = inva(0,1), i11 = inva(1,1);
+//     TinyMatrix<double,2> da_du, da_dv;
+//     std::tie(da_du, da_dv) = computeMetricDerivatives();  // Per face
 
-    // pointers to gradients
-    const TinyMatrix<double,2>* d[2] = { &da_du, &da_dv };
-    TinyMatrix<TinyMatrix<double,2>,2> Gamma;
+//     TinyMatrix<TinyMatrix<double,2>,2> Gamma;
 
-    for (int k = 0; k < 2; ++k) {
-      for (int i = 0; i < 2; ++i) {
-        for (int j = 0; j < 2; ++j) {
-          // unrolled ℓ=0,1
-          double t0 = (*d[i])(0,j) + (*d[j])(0,i) - (*d[0])(i,j);
-          double t1 = (*d[i])(1,j) + (*d[j])(1,i) - (*d[1])(i,j);
-          double sum = (k==0 ? i00*t0 + i01*t1
-                             : i01*t0 + i11*t1);
-          Gamma(k,i)(0,j) = 0.5 * sum;
-        }
-      }
-    }
+//     for (int k = 0; k < 2; ++k) {
+//         for (int i = 0; i < 2; ++i) {
+//             for (int j = 0; j < 2; ++j) {
+//                 double sum = 0.0;
+//                 for (int l = 0; l < 2; ++l) {
+//                     const TinyMatrix<double,2>& d_i = (i == 0 ? da_du : da_dv);
+//                     const TinyMatrix<double,2>& d_j = (j == 0 ? da_du : da_dv);
+//                     const TinyMatrix<double,2>& d_l = (l == 0 ? da_du : da_dv);
 
-    return Gamma;
-}
+//                     double term = d_i(l,j) + d_j(l,i) - d_l(i,j);
+//                     sum += inva(k,l) * term;
+//                 }
+//                 Gamma(k,i)(0,j) = 0.5 * sum;  // ✅ specify both indices
+// 				// Gamma(k,i)(j,0) = 0.5 * sum; 
 
-// -----------------------------------------------------------------------------
-// 2) correct Face::precomputeGeometry to call the above
-// -----------------------------------------------------------------------------
-// Replace your current precomputeGeometry with this:
+//             }
+//         }
+//     }
 
-void Face::precomputeGeometry() {
-
-    m_a     = computeMetric();
-    // std::tie(m_da_du, m_da_dv) = computeMetricDerivatives();
-    m_invA  = m_a.inverse();
-    // m_Gamma = computeConnectionCached(m_a, m_da_du, m_da_dv);
-	
-}
-
-
-
-
+//     return Gamma;
+// }
 /* ============================================================================== */
 /* Calculate the energy gradient */
 void Face::setForce() {
@@ -950,79 +914,18 @@ double NonEuclideanShell::connectionEnergy() const
 }
 
 /* ============================================================================== */
-// /* Calculate the total energy */
-// double NonEuclideanShell::energy() const
-// {
-// 	if (m_verbosity>3) Errors::StepIn("NonEuclideanShell::energy()");
-
-// 	double energy = stretchingEnergy() + bendingEnergy() + connectionEnergy();
-
-// 	if (m_verbosity>1)
-// 		std::cout << "NonEuclideanShell::energy()    = " << energy << std::endl;
-
-// 	return energy;
-// }
 /* Calculate the total energy */
-// -----------------------------------------------------------------------------
-double NonEuclideanShell::energy() const {
-    if (m_verbosity > 3) Errors::StepIn("NonEuclideanShell::energy()");
-
-    // Optionally: If you need to recompute geometry for each face, do it here.
-    for (int i = 0; i < m_faces.length(); ++i) {
-        m_faces(i)->precomputeGeometry();
-    }
-
-    double E = 0.0;
-    for (int i = 0; i < m_faces.length(); ++i) {
-        Face* f = m_faces(i);
-        E += f->stretchingEnergy() + f->bendingEnergy() + f->connectionEnergy();
-    }
-
-    if (m_verbosity > 1)
-        std::cout << "NonEuclideanShell::energy() = " << E << std::endl;
-
-    return E;
-}
-
-
-
-// -----------------------------------------------------------------------------
-
-	// /* Calculate the stretching forces */
-	// void NonEuclideanShell::setForce()
-	// {
-	// 	if (m_verbosity>3) Errors::StepIn("NonEuclideanShell::setForce()");
-		
-	// 	for (int i=0; i<m_faces.length(); i++)
-	// 		m_faces(i)->setForce();
-
-	// }
-
-void NonEuclideanShell::setForce()
+double NonEuclideanShell::energy() const
 {
-    if (m_verbosity > 3) Errors::StepIn("NonEuclideanShell::setForce()");
+	if (m_verbosity>3) Errors::StepIn("NonEuclideanShell::energy()");
 
-    initializeForce(); // Set all node forces to zero first!
-    double ep = 1e-6;
+	double energy = stretchingEnergy() + bendingEnergy() + connectionEnergy();
 
-    // Loop over all free nodes
-    for (int i = 0; i < m_nodes.length(); ++i)
-    {
-        if (m_nodes(i)->fixed() == -2)  // Only free nodes
-        {
-            for (int comp = 0; comp < 3; ++comp)
-            {
-                m_nodes(i)->position(comp) += ep;
-                double Eplus = energy();
-                m_nodes(i)->position(comp) -= 2 * ep;
-                double Eminus = energy();
-                m_nodes(i)->force(comp) = 0.5 * (Eplus - Eminus) / ep;
-                m_nodes(i)->position(comp) += ep; // Restore original
-            }
-        }
-    }
+	if (m_verbosity>1)
+		std::cout << "NonEuclideanShell::energy()    = " << energy << std::endl;
+
+	return energy;
 }
-
 
 /* ============================================================================== */
 /* Calculate size of optimization problem */
@@ -1039,6 +942,16 @@ int NonEuclideanShell::SizeOfOptimizationProblem() const
 	return sop;
 }
 
+/* ============================================================================== */
+/* Calculate the stretching forces */
+void NonEuclideanShell::setForce()
+{
+	if (m_verbosity>3) Errors::StepIn("NonEuclideanShell::setForce()");
+
+	for (int i=0; i<m_faces.length(); i++)
+		m_faces(i)->setForce();
+
+}
 
 /* ============================================================================== */
 /* Dump results to file (binary) */

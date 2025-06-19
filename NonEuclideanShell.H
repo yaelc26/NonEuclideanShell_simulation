@@ -197,25 +197,9 @@ class Face
 		std::pair<TinyMatrix<double,2>,TinyMatrix<double,2>> computeMetricDerivatives() const;
 		TinyMatrix<TinyMatrix<double,2>,2> computeConnection() const;
 
-	    // — cached‐metric γ-helpers — 
-		std::pair<TinyMatrix<double,2>, TinyMatrix<double,2>>
-		computeMetricDerivativesCached(
-			const TinyMatrix<double,2>& N0,
-			const TinyMatrix<double,2>& N1,
-			const TinyMatrix<double,2>& N2
-		) const;
+	
 
-
-		/** Cached Christoffel: */
-		TinyMatrix<TinyMatrix<double,2>,2>
-		computeConnectionCached(
-			const TinyMatrix<double,2>& a,
-			const TinyMatrix<double,2>& da_du,
-			const TinyMatrix<double,2>& da_dv
-		) const;
-
-
-	void precomputeGeometry();
+		    // in class Face { … }
 
 		// access one of the three neighbor pointers
 		Face* neighbor(int e) const { return m_faces(e); }
@@ -264,12 +248,6 @@ class Face
 		TinyMatrix<double,2> m_bbar;
 		TinyMatrix<double,2> m_invabar;
 		TinyMatrix< TinyMatrix<double,2>, 2 > m_gammabar;
-
-		// ——— cached geometry (added) ———
-		TinyMatrix<double,2>                m_a, m_invA;     // metric & its inverse
-		TinyMatrix<double,2>                m_da_du, m_da_dv; // ∂₁a, ∂₂a
-		TinyMatrix<TinyMatrix<double,2>,2>   m_Gamma;         // Γᵏ_{ij}
-
 
 
 	};
