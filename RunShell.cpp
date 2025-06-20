@@ -36,6 +36,8 @@ namespace fs = std::filesystem;
 #include "gsl/gsl_multimin.h"
 #include "gsl/gsl_vector.h"
 #include <gsl/gsl_errno.h>
+#include <gsl/gsl_blas.h>
+
 
 
 /* forward function declarations (for optimizer) */
@@ -407,7 +409,10 @@ int main() {
 
 	/* set paramters of optimizer */
 	// gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.01, 1e-6);
-	gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.001 , 1e-6 );
+	
+	/* set paramters of optimizer */
+	gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.01, 1e-5);	
+	
 
 
 	/* the optimization loop */
@@ -450,6 +455,16 @@ int main() {
 		// double adjustParamMetric = 1.0;
 		/* perform an iteration */
 		status = gsl_multimin_fdfminimizer_iterate(optimizer);
+	    // if (iter % 100 == 0 ) {
+        // std::cout << "Iter " << iter
+        //           << " E = " << lattice.energy()
+        //           << " stretch = " << lattice.stretchingEnergy()
+        //           << " bend = " << lattice.bendingEnergy()
+        //           << " conn = " << lattice.connectionEnergy()
+        //           << std::endl;
+        // std::cout << "Gradient norm: " << gsl_blas_dnrm2(optimizer->gradient) << std::endl;
+    	// }
+
 		// if (status == GSL_ENOPROG) {
 		// 	std::cout << "Line search stagnated at iter " << iter << " — exiting\n";
 		// 	break;

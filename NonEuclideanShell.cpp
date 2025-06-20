@@ -537,6 +537,7 @@ TinyVector<double,3> Face::LMN() const
      Γᵏ_{ij} = ½ a^{kℓ} ( ∂ᵢ a_{ℓj} + ∂ⱼ a_{ℓi} - ∂_ℓ a_{ij} )
 */
 TinyMatrix<TinyMatrix<double,2>,2> Face::computeConnection() const {
+	
     // 1) compute metric and its inverse
     TinyVector<double,3> ef = EFG();
     TinyMatrix<double,2> a;
@@ -917,14 +918,19 @@ double NonEuclideanShell::connectionEnergy() const
 /* Calculate the total energy */
 double NonEuclideanShell::energy() const
 {
-	if (m_verbosity>3) Errors::StepIn("NonEuclideanShell::energy()");
+    double energy;
+    if (m_faces.length() > 0 && m_faces(0)->getLambdaG() == 0.0 && m_faces(0)->getMuG() == 0.0) {
+    // std::cout << "[DEBUG] Skipping connection energy (lambdaG and muG are zero for all faces)\n";
+    energy = stretchingEnergy() + bendingEnergy();
+	} else {
+    energy = stretchingEnergy() + bendingEnergy() + connectionEnergy();
+	}
 
-	double energy = stretchingEnergy() + bendingEnergy() + connectionEnergy();
 
-	if (m_verbosity>1)
-		std::cout << "NonEuclideanShell::energy()    = " << energy << std::endl;
+    if (m_verbosity > 1)
+        std::cout << "NonEuclideanShell::energy()    = " << energy << std::endl;
 
-	return energy;
+    return energy;
 }
 
 /* ============================================================================== */
@@ -1326,7 +1332,11 @@ void NonEuclideanShell::testGradient()
 	/* output */
 	for (int i=0; i<noDOF; i++)
 	{
-		std::cout << grad[i] << " " << gradFull[i] << " " <<  fabs(gradFull[i]-grad[i]) << std::endl;
+		// std::cout << grad[i] << " " << gradFull[i] << " " <<  fabs(gradFull[i]-grad[i]) << std::endl;
+		std::cout << grad[i] << " " << gradFull[i] << " " << fabs(gradFull[i]-grad[i])
+          << " " << (fabs(gradFull[i]) > 1e-10 ? fabs(gradFull[i]-grad[i])/fabs(gradFull[i]) : 0.0)
+          << std::endl;	
+
 	}
 
 

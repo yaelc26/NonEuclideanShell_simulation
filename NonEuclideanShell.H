@@ -214,6 +214,9 @@ class Face
 
         /* Output the area */
         double area() const { return m_area; }
+		double getLambdaG() const { return m_lambdaG; }
+		double getMuG() const { return m_muG; }
+
 
 	private:
 		
