@@ -65,13 +65,13 @@ def create_input_files(sim_name,
     pfile = os.path.join(output_dir, f"{sim_name}_p-distmesh.dat")
     tfile = os.path.join(output_dir, f"{sim_name}_t-distmesh.dat")
     with open(pfile,'w') as f:
-        f.write(f"{len(P_raw)}\n")
-        for i,(u,v) in enumerate(P_raw):
-            f.write(f"{i}\t{u:.7f}\t{v:.7f}\n")
+        # f.write(f"{len(P_raw)}\n")
+        for (u,v) in P_raw:
+            f.write(f"{u:.7f}\t{v:.7f}\n")
     with open(tfile,'w') as f:
-        f.write(f"{len(T_raw)}\n")
-        for i,tri in enumerate(T_raw):
-            f.write(f"{i}\t{tri[0]}\t{tri[1]}\t{tri[2]}\n")
+        for (v0,v1,v2) in T_raw:
+            f.write(f"{v0+1}\t{v1+1}\t{v2+1}\n")
+
     N = len(P_raw)
     V = np.zeros((4, N), dtype=float)
     V[0, :] = np.arange(N)

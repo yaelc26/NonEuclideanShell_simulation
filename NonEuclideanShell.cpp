@@ -12,6 +12,8 @@
 #include <cmath>
 #include <vector>
 #include <unordered_map>
+#include <map>
+
 
 
 /* ==============================================================================  */
@@ -750,6 +752,8 @@ m_verbosity(2)
 
 	if (m_verbosity>1)
 		std::cout << "NonEuclideanShell::NonEuclideanShell()   Number of Nodes = " << numberNodes << std::endl;
+    // ——— DEBUG: collect counts of each isfixed value ———
+    std::map<int,int> flagCounts;
 
 	for (int i=0; i<numberNodes; i++)
 	{
@@ -758,11 +762,22 @@ m_verbosity(2)
 		nodesFileHandle.read(v);
 		nodesFileHandle.read(isfixed);
 		m_nodes(i)  = new Node();
+        // ——— DEBUG: print each one as it arrives ———
+        // std::cerr << "[DEBUG] Read vertex " << index
+        //           << " → u=" << u << ", v=" << v
+        //           << ", isfixed=" << isfixed << "\n";
+        // tally for summary
+        flagCounts[isfixed]++;
 		m_nodes(i)->coordinates(0) = u;
 		m_nodes(i)->coordinates(1) = v;
 		m_nodes(i)->fixed() = isfixed;
 	}
 	nodesFileHandle.close();
+	  // ——— DEBUG: print a summary of all flags seen ———
+    std::cerr << "[DEBUG] isfixed value summary:\n";
+    for (auto &kv : flagCounts) {
+        std::cerr << "   " << kv.first << " → " << kv.second << " vertices\n";
+    }
 
 	/* Take care of Faces */
 	TextFileHandle facesFileHandle(a_facesFileName,FileHandle::OPEN_RD);

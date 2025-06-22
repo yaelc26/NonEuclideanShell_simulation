@@ -562,7 +562,8 @@ int main() {
 	char *space = (char*)(" ");
 	double Es = lattice.stretchingEnergy();
 	double Eb = lattice.bendingEnergy();
-	double E = Es + Eb;
+	double Eg = lattice.connectionEnergy();
+	double E = Es + Eb + Eg;
 	energyFileHandle.write(0);
 	energyFileHandle.write(space);
 	energyFileHandle.write(E);
@@ -570,6 +571,8 @@ int main() {
 	energyFileHandle.write(Es);
 	energyFileHandle.write(space);
 	energyFileHandle.write(Eb);
+	energyFileHandle.write(space);
+	energyFileHandle.write(Eg);
 	energyFileHandle.write(space);
 	energyFileHandle.write(1.0);
 	energyFileHandle.newline();
