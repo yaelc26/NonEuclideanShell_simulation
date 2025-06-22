@@ -78,7 +78,7 @@ def create_input_files(sim_name,
     V[1:3, :] = P_raw.T
     # apply your flag_func to each (u,v)
     tolu, tolv = tols
-    flag_func    = make_flag_func(umin, umax, vmin, vmax, tolu=0.05, tolv=0)
+    flag_func    = make_flag_func(umin, umax, vmin, vmax, tolu=tolu, tolv=tolv)
 
     V[3, :] = [flag_func(u, v) for u, v in P_raw]
 
