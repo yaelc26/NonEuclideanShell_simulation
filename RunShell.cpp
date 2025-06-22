@@ -411,7 +411,7 @@ int main() {
 	// gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.01, 1e-6);
 	
 	/* set paramters of optimizer */
-	gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.01, 1e-5);	
+	gsl_multimin_fdfminimizer_set(optimizer, &my_func, IC, 0.01, 1e-6);	
 	
 
 

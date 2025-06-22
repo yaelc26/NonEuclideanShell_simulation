@@ -441,50 +441,133 @@ TinyMatrix<double,2> Face::computeMetric() const
 }
 /* ============================================================================== */
 /* computeMetricDerivatives */
+// std::pair<TinyMatrix<double,2>, TinyMatrix<double,2>>
+// Face::computeMetricDerivatives() const
+// {
+//     // ——— DEBUG: print connection stiffness params instead of da/du, da/dv ———
+//     // std::cout
+//     //   << "DEBUG Face @ (" << m_coordinates(0) << ", " << m_coordinates(1) << "): "
+//     //   << "lambdaG = " << m_lambdaG
+//     //   << ", muG = "     << m_muG
+//     //   << std::endl;
+//     // —————————————————————————————————————————————————————————————————————————
+
+//     // 1) make sure neighbors exist
+	
+//     // assert(m_faces(0) && m_faces(1) && m_faces(2));
+// 	{
+//     // if any neighbor is missing, just return zeros
+//     if (!m_faces(0) || !m_faces(1) || !m_faces(2)) {
+// 		std::cerr << "Warning: Missing neighbor face(s) detected!" << std::endl;
+
+//         return { TinyMatrix<double,2>(), TinyMatrix<double,2>() };
+//     }
+// 	}
+
+//     // 2) pull the metric a on the three neighbor faces
+//     TinyMatrix<double,2> N0 = m_faces(0)->computeMetric();
+//     TinyMatrix<double,2> N1 = m_faces(1)->computeMetric();
+//     TinyMatrix<double,2> N2 = m_faces(2)->computeMetric();
+
+//     // 3) compute parametric differences Δu and Δv
+//     double du = m_faces(0)->coordinates()(0)
+//               - m_faces(1)->coordinates()(0);
+//     double dv = m_faces(0)->coordinates()(1)
+//               - m_faces(2)->coordinates()(1);
+// 	if (fabs(du) < 1e-12 || fabs(dv) < 1e-12) {
+// 		// handle boundary or degenerate case…
+// 		return { TinyMatrix<double,2>(), TinyMatrix<double,2>() };
+// 	}
+
+//     // 4) finite‐difference the metric
+//     TinyMatrix<double,2> da_du = (N0 - N1) * (1.0/du);
+//     TinyMatrix<double,2> da_dv = (N0 - N2) * (1.0/dv);
+// 	// std::cout << "du = " << du << ", dv = " << dv << std::endl;
+// 	// if(fabs(du) < 1e-8 || fabs(dv) < 1e-8)
+// 	// 	std::cerr << "Warning: Very small du/dv detected!" << std::endl;
+
+//     return std::make_pair(da_du, da_dv);
+// }
+
+// /* computeMetricDerivatives */
 std::pair<TinyMatrix<double,2>, TinyMatrix<double,2>>
 Face::computeMetricDerivatives() const
 {
-    // ——— DEBUG: print connection stiffness params instead of da/du, da/dv ———
-    // std::cout
-    //   << "DEBUG Face @ (" << m_coordinates(0) << ", " << m_coordinates(1) << "): "
-    //   << "lambdaG = " << m_lambdaG
-    //   << ", muG = "     << m_muG
-    //   << std::endl;
-    // —————————————————————————————————————————————————————————————————————————
+    const double tol = 1e-8;
 
-    // 1) make sure neighbors exist
-	
-    // assert(m_faces(0) && m_faces(1) && m_faces(2));
-	{
-    // if any neighbor is missing, just return zeros
-    if (!m_faces(0) || !m_faces(1) || !m_faces(2)) {
-        return { TinyMatrix<double,2>(), TinyMatrix<double,2>() };
+    // 1) pull neighbor metrics (if they exist)
+    TinyMatrix<double,2> N0, N1, N2;
+    if (m_faces(0)) N0 = m_faces(0)->computeMetric();
+    if (m_faces(1)) N1 = m_faces(1)->computeMetric();
+    if (m_faces(2)) N2 = m_faces(2)->computeMetric();
+
+    // 2) this face’s own metric
+    TinyMatrix<double,2> a0 = computeMetric();
+
+    // 3) uv coords of this face and its neighbors
+    double u0  = m_coordinates(0),      v0  = m_coordinates(1);
+    double u0p = m_faces(0) ? m_faces(0)->coordinates()(0) : 0.0;
+    double u1p = m_faces(1) ? m_faces(1)->coordinates()(0) : 0.0;
+    double v0p = m_faces(0) ? m_faces(0)->coordinates()(1) : 0.0;
+    double v2p = m_faces(2) ? m_faces(2)->coordinates()(1) : 0.0;
+
+    // 4) allocate outputs
+    TinyMatrix<double,2> da_du, da_dv;
+
+    // —— ∂a/∂u using neighbors 0 & 1 —— 
+    if (m_faces(0) && m_faces(1)) {
+        double du = u0p - u1p;
+        if (fabs(du) > tol)
+            da_du = (N0 - N1) * (1.0/du);
+        else
+            da_du = TinyMatrix<double,2>();
     }
-	}
+    else if (m_faces(0)) {
+        double du = u0p - u0;
+        if (fabs(du) > tol)
+            da_du = (N0 - a0) * (1.0/du);
+        else
+            da_du = TinyMatrix<double,2>();
+    }
+    else if (m_faces(1)) {
+        double du = u0 - u1p;
+        if (fabs(du) > tol)
+            da_du = (a0 - N1) * (1.0/du);
+        else
+            da_du = TinyMatrix<double,2>();
+    }
+    else {
+        da_du = TinyMatrix<double,2>();  // no neighbors ⇒ zero
+    }
 
-    // 2) pull the metric a on the three neighbor faces
-    TinyMatrix<double,2> N0 = m_faces(0)->computeMetric();
-    TinyMatrix<double,2> N1 = m_faces(1)->computeMetric();
-    TinyMatrix<double,2> N2 = m_faces(2)->computeMetric();
+    // —— ∂a/∂v using neighbors 0 & 2 —— 
+    if (m_faces(0) && m_faces(2)) {
+        double dv = v0p - v2p;
+        if (fabs(dv) > tol)
+            da_dv = (N0 - N2) * (1.0/dv);
+        else
+            da_dv = TinyMatrix<double,2>();
+    }
+    else if (m_faces(0)) {
+        double dv = v0p - v0;
+        if (fabs(dv) > tol)
+            da_dv = (N0 - a0) * (1.0/dv);
+        else
+            da_dv = TinyMatrix<double,2>();
+    }
+    else if (m_faces(2)) {
+        double dv = v0 - v2p;
+        if (fabs(dv) > tol)
+            da_dv = (a0 - N2) * (1.0/dv);
+        else
+            da_dv = TinyMatrix<double,2>();
+    }
+    else {
+        da_dv = TinyMatrix<double,2>();  // no neighbors ⇒ zero
+    }
 
-    // 3) compute parametric differences Δu and Δv
-    double du = m_faces(0)->coordinates()(0)
-              - m_faces(1)->coordinates()(0);
-    double dv = m_faces(0)->coordinates()(1)
-              - m_faces(2)->coordinates()(1);
-	if (fabs(du) < 1e-12 || fabs(dv) < 1e-12) {
-		// handle boundary or degenerate case…
-		return { TinyMatrix<double,2>(), TinyMatrix<double,2>() };
-	}
-
-    // 4) finite‐difference the metric
-    TinyMatrix<double,2> da_du = (N0 - N1) * (1.0/du);
-    TinyMatrix<double,2> da_dv = (N0 - N2) * (1.0/dv);
-	// std::cout << "du = " << du << ", dv = " << dv << std::endl;
-	// if(fabs(du) < 1e-8 || fabs(dv) < 1e-8)
-	// 	std::cerr << "Warning: Very small du/dv detected!" << std::endl;
-
-    return std::make_pair(da_du, da_dv);
+    // 5) return the two partial derivatives
+    return { da_du, da_dv };
 }
 
 /* ============================================================================== */

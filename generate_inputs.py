@@ -138,6 +138,17 @@ def create_input_files(sim_name,
         for j in range(M):
             f.write("\t".join(str(x) for x in T[:,j]) + "\n")
     
+    # 6) **Plot the triangle mesh** in the UV‐plane (inline, no saving)
+
+    fig, ax = plt.subplots()
+    ax.triplot(P_raw[:,0], P_raw[:,1], T_raw, color='black', lw=0.5)
+    # ax.set_aspect('equal')
+    ax.set_xlabel('u')
+    ax.set_ylabel('v')
+    ax.set_title(f'{sim_name} UV-mesh')
+    plt.tight_layout()
+    plt.show()
+    
 
 
 def make_in_file(params, output_dir, sim_name):
