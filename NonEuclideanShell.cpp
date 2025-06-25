@@ -491,86 +491,167 @@ TinyMatrix<double,2> Face::computeMetric() const
 //     return std::make_pair(da_du, da_dv);
 // }
 
-// /* computeMetricDerivatives */
+// /* computeMetricDerivatives - works well but cooses 2 neighbors*/
+// std::pair<TinyMatrix<double,2>, TinyMatrix<double,2>>
+// Face::computeMetricDerivatives() const
+// {
+//     const double tol = 1e-8;
+
+//     // 1) pull neighbor metrics (if they exist)
+//     TinyMatrix<double,2> N0, N1, N2;
+//     if (m_faces(0)) N0 = m_faces(0)->computeMetric();
+//     if (m_faces(1)) N1 = m_faces(1)->computeMetric();
+//     if (m_faces(2)) N2 = m_faces(2)->computeMetric();
+
+//     // 2) this face’s own metric
+//     TinyMatrix<double,2> a0 = computeMetric();
+
+//     // 3) uv coords of this face and its neighbors
+//     double u0  = m_coordinates(0),      v0  = m_coordinates(1);
+//     double u0p = m_faces(0) ? m_faces(0)->coordinates()(0) : 0.0;
+//     double u1p = m_faces(1) ? m_faces(1)->coordinates()(0) : 0.0;
+//     double v0p = m_faces(0) ? m_faces(0)->coordinates()(1) : 0.0;
+//     double v2p = m_faces(2) ? m_faces(2)->coordinates()(1) : 0.0;
+
+//     // 4) allocate outputs
+//     TinyMatrix<double,2> da_du, da_dv;
+
+//     // —— ∂a/∂u using neighbors 0 & 1 —— 
+//     if (m_faces(0) && m_faces(1)) {
+//         double du = u0p - u1p;
+//         if (fabs(du) > tol)
+//             da_du = (N0 - N1) * (1.0/du);
+//         else
+//             da_du = TinyMatrix<double,2>();
+//     }
+//     else if (m_faces(0)) {
+//         double du = u0p - u0;
+//         if (fabs(du) > tol)
+//             da_du = (N0 - a0) * (1.0/du);
+//         else
+//             da_du = TinyMatrix<double,2>();
+//     }
+//     else if (m_faces(1)) {
+//         double du = u0 - u1p;
+//         if (fabs(du) > tol)
+//             da_du = (a0 - N1) * (1.0/du);
+//         else
+//             da_du = TinyMatrix<double,2>();
+//     }
+//     else {
+//         da_du = TinyMatrix<double,2>();  // no neighbors ⇒ zero
+//     }
+
+//     // —— ∂a/∂v using neighbors 0 & 2 —— 
+//     if (m_faces(0) && m_faces(2)) {
+//         double dv = v0p - v2p;
+//         if (fabs(dv) > tol)
+//             da_dv = (N0 - N2) * (1.0/dv);
+//         else
+//             da_dv = TinyMatrix<double,2>();
+//     }
+//     else if (m_faces(0)) {
+//         double dv = v0p - v0;
+//         if (fabs(dv) > tol)
+//             da_dv = (N0 - a0) * (1.0/dv);
+//         else
+//             da_dv = TinyMatrix<double,2>();
+//     }
+//     else if (m_faces(2)) {
+//         double dv = v0 - v2p;
+//         if (fabs(dv) > tol)
+//             da_dv = (a0 - N2) * (1.0/dv);
+//         else
+//             da_dv = TinyMatrix<double,2>();
+//     }
+//     else {
+//         da_dv = TinyMatrix<double,2>();  // no neighbors ⇒ zero
+//     }
+
+//     // 5) return the two partial derivatives
+//     return { da_du, da_dv };
+// }
 std::pair<TinyMatrix<double,2>, TinyMatrix<double,2>>
 Face::computeMetricDerivatives() const
 {
-    const double tol = 1e-8;
+    // Collect available neighbors and their UVs
+    struct Neighbor {
+        TinyMatrix<double,2> metric;
+        double du, dv;
+        double weight;
+    };
+    std::vector<Neighbor> neighbors;
 
-    // 1) pull neighbor metrics (if they exist)
-    TinyMatrix<double,2> N0, N1, N2;
-    if (m_faces(0)) N0 = m_faces(0)->computeMetric();
-    if (m_faces(1)) N1 = m_faces(1)->computeMetric();
-    if (m_faces(2)) N2 = m_faces(2)->computeMetric();
+    const TinyMatrix<double,2> a0 = computeMetric();
+    const double u0 = m_coordinates(0), v0 = m_coordinates(1);
 
-    // 2) this face’s own metric
-    TinyMatrix<double,2> a0 = computeMetric();
+    for (int ni = 0; ni < 3; ++ni) {
+        if (!m_faces(ni)) continue;
+        TinyMatrix<double,2> aj = m_faces(ni)->computeMetric();
+        double uj = m_faces(ni)->coordinates()(0);
+        double vj = m_faces(ni)->coordinates()(1);
 
-    // 3) uv coords of this face and its neighbors
-    double u0  = m_coordinates(0),      v0  = m_coordinates(1);
-    double u0p = m_faces(0) ? m_faces(0)->coordinates()(0) : 0.0;
-    double u1p = m_faces(1) ? m_faces(1)->coordinates()(0) : 0.0;
-    double v0p = m_faces(0) ? m_faces(0)->coordinates()(1) : 0.0;
-    double v2p = m_faces(2) ? m_faces(2)->coordinates()(1) : 0.0;
+        double du = uj - u0;
+        double dv = vj - v0;
+        double dist2 = du*du + dv*dv;
+        if (dist2 < 1e-12) continue;
 
-    // 4) allocate outputs
+        // Weight: inverse squared distance (safe, regularizes for closer neighbors)
+        double w = 1.0 / dist2;
+
+        neighbors.push_back({aj, du, dv, w});
+    }
+
+    // If no neighbors, return zero
+    if (neighbors.empty())
+        return {TinyMatrix<double,2>(), TinyMatrix<double,2>()};
+
+    // Least-squares: Solve W*Δa = W*[du, dv] * [da_du; da_dv]
+    // For each metric component, solve independently (since TinyMatrix is small)
+
+    // Each metric is symmetric 2x2, we can unroll as [a00, a01, a11]
+    // We'll fit each component separately
+
     TinyMatrix<double,2> da_du, da_dv;
+    for (int m=0; m<2; ++m) for (int n=0; n<=m; ++n) { // (0,0), (0,1), (1,1)
+        // Set up least-squares
+        double Sww = 0, Swu = 0, Swv = 0, Swuu = 0, Swvv = 0, Swuv = 0;
+        double Swa = 0, Swau = 0, Swav = 0;
 
-    // —— ∂a/∂u using neighbors 0 & 1 —— 
-    if (m_faces(0) && m_faces(1)) {
-        double du = u0p - u1p;
-        if (fabs(du) > tol)
-            da_du = (N0 - N1) * (1.0/du);
-        else
-            da_du = TinyMatrix<double,2>();
-    }
-    else if (m_faces(0)) {
-        double du = u0p - u0;
-        if (fabs(du) > tol)
-            da_du = (N0 - a0) * (1.0/du);
-        else
-            da_du = TinyMatrix<double,2>();
-    }
-    else if (m_faces(1)) {
-        double du = u0 - u1p;
-        if (fabs(du) > tol)
-            da_du = (a0 - N1) * (1.0/du);
-        else
-            da_du = TinyMatrix<double,2>();
-    }
-    else {
-        da_du = TinyMatrix<double,2>();  // no neighbors ⇒ zero
-    }
+        for (const auto& N : neighbors) {
+            double da = N.metric(m,n) - a0(m,n);
+            double w = N.weight;
+            Sww  += w;
+            Swu  += w * N.du;
+            Swv  += w * N.dv;
+            Swuu += w * N.du * N.du;
+            Swvv += w * N.dv * N.dv;
+            Swuv += w * N.du * N.dv;
+            Swa  += w * da;
+            Swau += w * da * N.du;
+            Swav += w * da * N.dv;
+        }
 
-    // —— ∂a/∂v using neighbors 0 & 2 —— 
-    if (m_faces(0) && m_faces(2)) {
-        double dv = v0p - v2p;
-        if (fabs(dv) > tol)
-            da_dv = (N0 - N2) * (1.0/dv);
-        else
-            da_dv = TinyMatrix<double,2>();
+        // Build 2x2 system:
+        // [Swuu  Swuv][X] = [Swau]
+        // [Swuv  Swvv][Y]   [Swav]
+        double det = Swuu*Swvv - Swuv*Swuv;
+        double x = 0, y = 0;
+        if (fabs(det) > 1e-14) {
+            x = ( Swau*Swvv - Swav*Swuv) / det;
+            y = (Swuu*Swav - Swuv*Swau) / det;
+        }
+        // Place into the output derivatives
+        da_du(m,n) = x;
+        da_dv(m,n) = y;
+        if (m != n) {
+            da_du(n,m) = x;
+            da_dv(n,m) = y;
+        }
     }
-    else if (m_faces(0)) {
-        double dv = v0p - v0;
-        if (fabs(dv) > tol)
-            da_dv = (N0 - a0) * (1.0/dv);
-        else
-            da_dv = TinyMatrix<double,2>();
-    }
-    else if (m_faces(2)) {
-        double dv = v0 - v2p;
-        if (fabs(dv) > tol)
-            da_dv = (a0 - N2) * (1.0/dv);
-        else
-            da_dv = TinyMatrix<double,2>();
-    }
-    else {
-        da_dv = TinyMatrix<double,2>();  // no neighbors ⇒ zero
-    }
-
-    // 5) return the two partial derivatives
-    return { da_du, da_dv };
+    return {da_du, da_dv};
 }
+
 
 /* ============================================================================== */
 /* Calculate the second fundamental form */
