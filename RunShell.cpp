@@ -114,6 +114,9 @@ int main() {
 	int restart            = 1;
 	double ThicknessAdjust = 1.0;
 	double MetricAdjust    = 1.0;
+	double EtaAdjust = 1.0;
+	
+
 
 	std::string  nodeOutputFileName;
 	std::string  faceOutputFileName;
@@ -170,7 +173,7 @@ int main() {
 	std::cin >> inputFormula;
 	thickness_formula = new char[inputFormula.length() + 1];
 	strcpy(thickness_formula, inputFormula.c_str());
-	// std::cout << "[DEBUG] thickness_formula = \"" << thickness_formula << "\"" << std::endl;
+	std::cout << "[DEBUG] thickness_formula = \"" << thickness_formula << "\"" << std::endl;
 	// std::cout << "  " << thickness_formula << std::endl;
 	// std::cout << "Enter formula in (u,v) for Young's Modulus " << std::endl;
 	std::cin >> inputFormula;
@@ -196,6 +199,11 @@ int main() {
 	// std::cout << "  " << X0_formula << std::endl << "  " << Y0_formula << std::endl << "  " << Z0_formula << std::endl;
 	// ────────────────────────────────────────────────────────────
 	// Read the eight Γ̄ᵏᵢⱼ formulas
+	// --- read eta scalar value ---
+	double eta;
+	std::cin >> eta;
+	std::cout << "[DEBUG] Input eta = " << eta << std::endl;
+
     // --- first, read the connection‐energy Lamé parameters ---
     double lambdaG, muG;
     // std::cout << "Enter scalar λ_G for connection energy: " << std::endl;
@@ -251,7 +259,10 @@ int main() {
 	std::cin >> ThicknessAdjust;		// std::cout << "  " << ThicknessAdjust << std::endl;
 	// std::cout << "Enter Initial metric adjustment parameter " << std::endl;
 	std::cin >> MetricAdjust;			// std::cout << "  " << MetricAdjust << std::endl;
-	
+
+	// std::cout << "Enter Initial eta adjustment parameter " << std::endl;
+	std::cin >> EtaAdjust;				// std::cout << "  " << EtaAdjust << std::endl;
+
 
 	// std::cout << "Enter whether to restart (0=No, 1=restart) " << std::endl;
 	std::cin >> restart;
@@ -361,11 +372,19 @@ int main() {
 						  &inputFunctionBbar,
                           &inputFunctionPos0,
                           &inputFunctionGammaBar,
+						  eta,
                           lambdaG,
                           muG);
+	lattice.setAdjust(ThicknessAdjust,
+                  MetricAdjust,
+                  EtaAdjust);
+
+
+
 	// lattice.checkNodePositions(); // <-- This should ALSO print nothing
 
-	lattice.setAdjust(ThicknessAdjust, MetricAdjust);
+	// lattice.setAdjust(ThicknessAdjust, MetricAdjust);
+
 
 	/* temporary: test the gradient */
 	// lattice.testGradient();
@@ -422,15 +441,23 @@ int main() {
 	{
 		/* set the adjustment parameters */
 		double thicknessAdjustSign = 1.0;
+		
 		if (ThicknessAdjust < 1.0)	{thicknessAdjustSign = -1.0;}
 		// double adjustParamThickness	= 1.0 + (ThicknessAdjust - 1.0) * pow((1.0 - 5.0 * iter / NumberOfLoops),3);
 		double adjustParamThickness	= ThicknessAdjust + (1.0 - ThicknessAdjust) * pow(5.0 * iter / NumberOfLoops,3);
 		/*double adjustParamThickness	= ThicknessAdjust + (1.0 - ThicknessAdjust) * 0.5*(1 + sin(3.141592*(5.0 * iter / NumberOfLoops) - 0.727)/abs(sin(3.141592*(5.0 * iter / NumberOfLoops) - 0.727))); */
 		// double adjustParamThickness	= pow(ThicknessAdjust + (1.0 - ThicknessAdjust) * iter / NumberOfLoops,-2);//adjust wgal then calibrate
 		if (adjustParamThickness*thicknessAdjustSign < thicknessAdjustSign)	{adjustParamThickness = 1.0;}
-		double adjustParamMetric	= 1.0 + (MetricAdjust - 1.0) * (1.0 - 1.0 * iter / NumberOfLoops);
+		double adjustParamMetric = 1.0 + (MetricAdjust - 1.0) * (1.0 - 1.0 * iter / NumberOfLoops);
 		if (adjustParamMetric < 1)		{adjustParamMetric = 1.0;}
-		lattice.setAdjust(adjustParamThickness, adjustParamMetric);
+		double adjustParamEta = 1.0 + (EtaAdjust - 1.0) * pow((1.0 - 5.0 * iter / NumberOfLoops), 3);
+		// if (iter == 0) {
+		// 	std::cout << "[DEBUG] Initial eta = " << eta << std::endl;
+		// 	std::cout << "[DEBUG] Initial adjustParamEta = " << adjustParamEta << std::endl;
+		// }
+		lattice.setAdjust(adjustParamThickness, adjustParamMetric, adjustParamEta);
+
+
 		
 		// double adjustParamThickness = ThicknessAdjust + (1.0 - ThicknessAdjust) * pow(5.0 * iter / NumberOfLoops,3);
 		// double adjustParamMetric = 1.0 + (MetricAdjust - 1.0) * (1.0 - 1.0 * iter / NumberOfLoops);
@@ -514,9 +541,12 @@ int main() {
 		{
 		/* print the current energy and thickness */
 			char *space = (char*)(" ");
-			double Es = lattice.stretchingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
-			double Eb = lattice.bendingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
-			double Eg = lattice.connectionEnergy()  * pow(adjustParamThickness * adjustParamMetric, 0);
+			// double Es = lattice.stretchingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
+			// double Eb = lattice.bendingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
+			// double Eg = lattice.connectionEnergy()  * pow(adjustParamThickness * adjustParamMetric, 0);
+			double Es = lattice.stretchingEnergy();
+			double Eb = lattice.bendingEnergy();
+			double Eg = lattice.connectionEnergy();
     		double E  = Es + Eb + Eg;
 			energyFileHandle.write(iter);
 			energyFileHandle.write(space);
@@ -536,7 +566,10 @@ int main() {
 			int PercentDone = 100*iter/NumberOfLoops;
 			std::cout.precision(15);
 			std::cout << PercentDone << "% Done: " << "The current energy is " << Efinal << std::endl;
-			
+			std::cout << " stretch = " << lattice.stretchingEnergy()
+				<< " bend = " << lattice.bendingEnergy()
+				<< " conn = " << lattice.connectionEnergy()
+				<< std::endl;
 			lattice.DumpStateTextFormat(&nodeOutputFileHandle, &faceOutputFileHandle, ++print_counter);
 			lattice.DumpFormsTextFormat(&EFGLMNOutputFileHandle);
 		}
@@ -559,6 +592,7 @@ int main() {
 		/* Calculate the final energy and output it */
 	std::cout.precision(15);
 	std::cout << "The final energy is " << lattice.energy() << std::endl;
+
 	char *space = (char*)(" ");
 	double Es = lattice.stretchingEnergy();
 	double Eb = lattice.bendingEnergy();

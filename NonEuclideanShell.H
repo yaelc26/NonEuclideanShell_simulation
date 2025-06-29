@@ -148,6 +148,7 @@ class Face
                         const TinyMatrix<double,2> a_abar,
                         const TinyMatrix<double,2> a_bbar,
                         const TinyMatrix< TinyMatrix<double,2>,2 >& a_gammabar,
+						double a_eta,
                         double a_lambdaG,
                         double a_muG);
 
@@ -155,7 +156,12 @@ class Face
 
 
 		/* Modify adjustment parameter */
-		void setAdjust(double a_adjust1, double a_adjust2) {m_adjust1 = a_adjust1; m_adjust2 = a_adjust2;}
+		// void setAdjust(double a_adjust1, double a_adjust2) {m_adjust1 = a_adjust1; m_adjust2 = a_adjust2;}
+		void setAdjust(double a_adjust1, double a_adjust2, double a_adjust3 = 1.0) {
+			m_adjust1 = a_adjust1;
+			m_adjust2 = a_adjust2;
+			m_adjust3 = a_adjust3;
+		}
 
 		/* return the position */
 		TinyVector<double,3> position() const;
@@ -239,7 +245,10 @@ class Face
 		double               m_thickness;
 		double               m_adjust1;
 		double               m_adjust2;
+		double               m_adjust3;
 		// Lamé parameters for the γ-energy term
+		double m_eta;
+
         double m_lambdaG;
         double m_muG;
 
@@ -299,21 +308,36 @@ class NonEuclideanShell
 //                           double lambdaG,
 //                           double muG);
         /** Set the reference forms and γ-term weights */
-        void setParameters(
-            double (*f_thickness)(double,double),
-            double (*f_lambda)(double,double),
-            double (*f_mu)(double,double),
-            TinyMatrix<double,2> (*f_abar)(double,double),
-            TinyMatrix<double,2> (*f_bbar)(double,double),
-            TinyVector<double,3> (*f_Pos0)(double,double),
-            TinyMatrix<TinyMatrix<double,2>,2> (*f_gammabar)(double,double),
-            double lambdaG,
-            double muG
-        );
+        // void setParameters(
+        //     double (*f_thickness)(double,double),
+        //     double (*f_lambda)(double,double),
+        //     double (*f_mu)(double,double),
+        //     TinyMatrix<double,2> (*f_abar)(double,double),
+        //     TinyMatrix<double,2> (*f_bbar)(double,double),
+        //     TinyVector<double,3> (*f_Pos0)(double,double),
+        //     TinyMatrix<TinyMatrix<double,2>,2> (*f_gammabar)(double,double),
+        //     double lambdaG,
+        //     double muG
+        // );
+		void setParameters(
+		double (*f_thickness)(double,double),
+		double (*f_lambda)(double,double),
+		double (*f_mu)(double,double),
+		TinyMatrix<double,2> (*f_abar)(double,double),
+		TinyMatrix<double,2> (*f_bbar)(double,double),
+		TinyVector<double,3> (*f_Pos0)(double,double),
+		TinyMatrix<TinyMatrix<double,2>,2> (*f_gammabar)(double,double),
+		double eta,
+		double lambdaG,
+		double muG
+	);
+
 
 
         /* set the adjustment parameters */
-		void setAdjust(double a_adjust1, double a_adjust2);
+		// void setAdjust(double a_adjust1, double a_adjust2);
+	void setAdjust(double a_adjust1, double a_adjust2, double a_adjust3 = 1.0);
+
 
 		/* Defaults initialization of positions */
 		void defaultInitialization();
@@ -345,6 +369,7 @@ private:
     Vector<Node*>                    m_nodes;
     Vector<Face*>                    m_faces;
     int                              m_verbosity;
+	double 							 m_eta;
     bool                             m_includeConn = false;
 };
 

@@ -13,6 +13,9 @@
 #include <vector>
 #include <unordered_map>
 #include <map>
+#include "LapackWrapper.H"   // for luDecompose() / luSolve()
+#include <algorithm>   // for std::clamp
+
 
 
 
@@ -42,13 +45,14 @@ m_bbar(),
 m_invabar(),
 m_adjust1(1.0),
 m_adjust2(1.0),
+m_adjust3(1.0),
 // **new members** — defaulted to zero/identity as appropriate
 m_gammabar(),      // default‐constructed 2×2 of 2×2 (all zeros)
 m_lambdaG(0.0),
 m_muG(0.0)
 {
 	/* Check that the first 3 Node* are not NULL */
-	assert(m_nodes(0)!=NULL && m_nodes(1)!=NULL && m_nodes(2)!=NULL);
+	// assert(m_nodes(0)!=NULL && m_nodes(1)!=NULL && m_nodes(2)!=NULL);
 
 	/* Set the Face coordinates to the average of the Nodes */
 	m_coordinates = (m_nodes(0)->coordinates() + m_nodes(1)->coordinates() + m_nodes(2)->coordinates());
@@ -75,6 +79,7 @@ void Face::initialize(double a_thickness,
 					  const TinyMatrix<double,2> a_abar,
 					  const TinyMatrix<double,2> a_bbar,
                       const TinyMatrix< TinyMatrix<double,2>,2 >& a_gammabar,
+					  double a_eta,
                       double a_lambdaG,
                       double a_muG)
 {
@@ -85,6 +90,8 @@ void Face::initialize(double a_thickness,
 	m_abar      = a_abar;
 	m_bbar      = a_bbar;
     m_gammabar  = a_gammabar;
+	m_eta       = a_eta;
+
     m_lambdaG   = a_lambdaG;
     m_muG       = a_muG;
 
@@ -238,28 +245,21 @@ double Face::bendingEnergy() const {
 
 // — connect —
 double Face::connectionEnergy() const {
-    double γ      = connectionEnergyContentDensity();
-    // double factor = std::pow(m_adjust2, -6)
-    //               * m_area
-    //               * std::pow(m_thickness * m_adjust1, 3);
+	double γ = connectionEnergyContentDensity();
+
+	// Compute η_eff = η * adjust3
+	double eta_eff = m_eta * m_adjust3;
+
+	// Compute factor: η_eff² * h * a1 / a2⁶
 	double invAdjust2_6 = 1.0 / (m_adjust2 * m_adjust2 * m_adjust2 *
-		m_adjust2 * m_adjust2 * m_adjust2
-	);
+	                             m_adjust2 * m_adjust2 * m_adjust2);
 
-	double base = m_thickness  * m_adjust1;
+	double factor = eta_eff * eta_eff
+	              * m_thickness * m_adjust1
+	              * invAdjust2_6;
 
-	double factor = invAdjust2_6 * m_area * base * base * base;
-    // std::cout << "[DEBUG Face] γ=" << γ
-    //           << " area="        << m_area
-    //           << " t³a1³="       << std::pow(m_thickness * m_adjust1,3)
-    //           << " a2="          << m_adjust2
-    //           << " factor="      << factor
-    //           << "\n";
-    return γ * factor;
+	return γ * factor;
 }
-
-
-
 /* ============================================================================== */
 /* Calculate stretching energy density */
 double Face::stretchingEnergyContentDensity() const
@@ -312,98 +312,131 @@ double Face::stretchingEnergyContentDensity() const
 
 /* ============================================================================== */
 /* Calculate bending energy density */
+// double Face::bendingEnergyContentDensity() const
+// {
+// 	/* Save the position of the Face */
+// 	TinyVector<double,3> my_position = position();
+// 	TinyVector<double,3> unitnormal = calculateUnitNormal();
+// 	TinyVector<double,6> rhs;
+// 	for (int nodeindex=0; nodeindex<6; nodeindex++)
+// 	{
+// 		if (m_nodes(nodeindex) != NULL)
+// 		{
+// 			TinyVector<double,3> dr = m_nodes(nodeindex)->position() - my_position;
+// 			rhs(nodeindex) = innerProduct(dr,unitnormal);
+// 		}
+// 		else
+// 		{
+// 			const TinyVector<double,2>  *ptr = NULL;
+// 			if (nodeindex==3)      ptr = &m_nodeconnector4;
+// 			else if (nodeindex==4) ptr = &m_nodeconnector5;
+// 			else                   ptr = &m_nodeconnector6;
+
+// 			rhs(nodeindex) = m_bbar(0,0) * (*ptr)(0) * (*ptr)(0) +
+// 				2*m_bbar(0,1)* (*ptr)(0) * (*ptr)(1) +
+// 				m_bbar(1,1)* (*ptr)(1) * (*ptr)(1);
+// 		}
+// 	}
+
+// 	TinyVector<double,6> bcomp = luSolve(m_Bmatrix, m_Bpivot, rhs);
+// 	TinyMatrix<double,2> b;
+// 	b(0,0) = bcomp(3);
+// 	b(0,1) = bcomp(4);
+// 	b(1,0) = bcomp(4);
+// 	b(1,1) = bcomp(5);
+
+// 	/* Adjust abar with adjustment parameter */
+// 	TinyMatrix<double,2> abarAdj = m_abar;
+// 	abarAdj.scale(m_adjust2);
+// 	abarAdj(0,0) += 1.0 - m_adjust2;
+// 	abarAdj(1,1) += 1.0 - m_adjust2;
+// 	TinyMatrix<double,2> invabarAdj = abarAdj.inverse();
+
+// 	/* Calculate inv(abar)(b - bbar) */
+// 	TinyMatrix<double,2> tmp  = invabarAdj*(b - m_bbar);
+
+// 	return (m_lambda*tmp.trace()*tmp.trace() + m_mu*(tmp*tmp).trace()) / 3;
+// }
+
+
 double Face::bendingEnergyContentDensity() const
 {
-	/* Save the position of the Face */
-	TinyVector<double,3> my_position = position();
-	TinyVector<double,3> unitnormal = calculateUnitNormal();
-	TinyVector<double,6> rhs;
-	for (int nodeindex=0; nodeindex<6; nodeindex++)
-	{
-		if (m_nodes(nodeindex) != NULL)
-		{
-			TinyVector<double,3> dr = m_nodes(nodeindex)->position() - my_position;
-			rhs(nodeindex) = innerProduct(dr,unitnormal);
-		}
-		else
-		{
-			const TinyVector<double,2>  *ptr = NULL;
-			if (nodeindex==3)      ptr = &m_nodeconnector4;
-			else if (nodeindex==4) ptr = &m_nodeconnector5;
-			else                   ptr = &m_nodeconnector6;
+    // get L,M,N
+    auto LMN = this->LMN();
+    TinyMatrix<double,2> b;
+    b(0,0)= LMN(0);
+    b(0,1)= LMN(1);
+    b(1,0)= LMN(1);
+    b(1,1)= LMN(2);
 
-			rhs(nodeindex) = m_bbar(0,0) * (*ptr)(0) * (*ptr)(0) +
-				2*m_bbar(0,1)* (*ptr)(0) * (*ptr)(1) +
-				m_bbar(1,1)* (*ptr)(1) * (*ptr)(1);
-		}
-	}
+    // adjust reference curvature m_bbar
+    TinyMatrix<double,2> abarAdj = m_abar;
+    abarAdj.scale(m_adjust2);
+    abarAdj(0,0) += 1.0 - m_adjust2;
+    abarAdj(1,1) += 1.0 - m_adjust2;
+    TinyMatrix<double,2> invA = abarAdj.inverse();
 
-	TinyVector<double,6> bcomp = luSolve(m_Bmatrix, m_Bpivot, rhs);
-	TinyMatrix<double,2> b;
-	b(0,0) = bcomp(3);
-	b(0,1) = bcomp(4);
-	b(1,0) = bcomp(4);
-	b(1,1) = bcomp(5);
-
-	/* Adjust abar with adjustment parameter */
-	TinyMatrix<double,2> abarAdj = m_abar;
-	abarAdj.scale(m_adjust2);
-	abarAdj(0,0) += 1.0 - m_adjust2;
-	abarAdj(1,1) += 1.0 - m_adjust2;
-	TinyMatrix<double,2> invabarAdj = abarAdj.inverse();
-
-	/* Calculate inv(abar)(b - bbar) */
-	TinyMatrix<double,2> tmp  = invabarAdj*(b - m_bbar);
-
-	return (m_lambda*tmp.trace()*tmp.trace() + m_mu*(tmp*tmp).trace()) / 3;
+    TinyMatrix<double,2> tmp = invA * (b - m_bbar);
+    return (m_lambda*tmp.trace()*tmp.trace() + m_mu*(tmp*tmp).trace())/3.0;
 }
+
 /* ============================================================================== */
 /* Calculate connection energy density */
 #include <iostream>    // for std::cout
-
-double Face::connectionEnergyContentDensity() const
-{
-    if (m_lambdaG == 0.0 && m_muG == 0.0)
+double Face::connectionEnergyContentDensity() const {
+    if (m_eta == 0.0)
         return 0.0;
 
-    // 1) true Christoffel
-    auto Gamma = computeConnection();
+    // Adjust reference metric abar to avoid numerical issues
+    TinyMatrix<double,2> abarAdj = m_abar;
+    abarAdj.scale(m_adjust2);
+    abarAdj(0,0) += 1.0 - m_adjust2;
+    abarAdj(1,1) += 1.0 - m_adjust2;
 
-    // 2) ΔΓ = Γ – Γ̄
-    TinyMatrix<TinyMatrix<double,2>,2> Delta;
-    for (int k = 0; k < 2; ++k) {
-      for (int i = 0; i < 2; ++i) {
-        for (int j = 0; j < 2; ++j) {
-          for (int l = 0; l < 2; ++l) {
-            Delta(k,i)(j,l) = 
-              Gamma(k,i)(j,l) - m_gammabar(k,i)(j,l);
-          }
-        }
-      }
+    // Elasticity tensor B^{μναβ} built from adjusted abar and Lamé parameters
+    auto B = [&](int mu, int nu, int alpha, int beta) {
+        return m_lambdaG * abarAdj(mu, nu) * abarAdj(alpha, beta)
+             + m_muG * (abarAdj(mu, alpha) * abarAdj(nu, beta)
+                      + abarAdj(mu, beta)  * abarAdj(nu, alpha));
+    };
+
+    // Compute actual and reference Christoffel symbols
+    TinyMatrix<TinyMatrix<double,2>,2> Gamma     = computeConnection();
+    const TinyMatrix<TinyMatrix<double,2>,2>& GammaBar = m_gammabar;
+
+    // Perform the contraction:
+    // W_conn = B^{μναβ} * (Γ^λ_{μν} - 𝛤̄^λ_{μν}) * (Γ^ρ_{αβ} - 𝛤̄^ρ_{αβ}) * 𝑎̄_{λρ}
+    double result = 0.0;
+    for (int mu = 0; mu < 2; ++mu)
+    for (int nu = 0; nu < 2; ++nu)
+    for (int alpha = 0; alpha < 2; ++alpha)
+    for (int beta = 0; beta < 2; ++beta)
+    for (int lambda = 0; lambda < 2; ++lambda)
+    for (int rho = 0; rho < 2; ++rho) {
+        double dGamma1 = Gamma(lambda, mu)(0, nu) - GammaBar(lambda, mu)(0, nu);
+        double dGamma2 = Gamma(rho, alpha)(0, beta) - GammaBar(rho, alpha)(0, beta);
+        result += B(mu, nu, alpha, beta) * dGamma1 * dGamma2 * abarAdj(lambda, rho);
     }
+	// --- debug: dump every Gamma^k_{ij} vs. Gammabar^k_{ij} ---
+// for (int k = 0; k < 2; ++k) {
+//   for (int i = 0; i < 2; ++i) {
+//     for (int j = 0; j < 2; ++j) {
+//       double G    = Gamma(k,i)(0, j);
+//       double Gbar = m_gammabar(k,i)(0, j);
+//       double Δ    = G - Gbar;
+//       std::cout 
+//         << "[DEBUG] Γ^" << k << "_{" << i << j << "} = " << G
+//         << ", 𝛤̄^"  << k << "_{" << i << j << "} = " << Gbar
+//         << ", Δ = "    << Δ << "\n";
+//     }
+//   }
+// }
 
-    // 3) trace and Frobenius‐norm²
-    double tr = 0.0, norm2 = 0.0;
-    for (int k = 0; k < 2; ++k) {
-      for (int i = 0; i < 2; ++i) {
-        tr += Delta(k,i)(i,i);
-        for (int j = 0; j < 2; ++j) {
-          for (int l = 0; l < 2; ++l) {
-            norm2 += Delta(k,i)(j,l) * Delta(k,i)(j,l);
-          }
-        }
-      }
-    }
 
-    // // —— DEBUG OUTPUT ——
-    // std::cout << "Face @(" << m_coordinates(0) << "," << m_coordinates(1) << "):\n"
-    //           << "  trace(ΔΓ) = " << tr  << "\n"
-    //           << "  ||ΔΓ||²   = " << norm2 << "\n";
 
-    // 4) isotropic Lamé energy
-    return 0.5 * m_lambdaG * (tr * tr) +   m_muG     *  norm2;
+    // Final result: h * η² * adjust3 * contraction
+    return 0.5 * m_thickness * m_eta * m_eta * m_adjust3 * result;
 }
-
 
 /* ============================================================================== */
 /* Calculate the first fundamental form */
@@ -571,122 +604,308 @@ TinyMatrix<double,2> Face::computeMetric() const
 //     // 5) return the two partial derivatives
 //     return { da_du, da_dv };
 // }
+// std::pair<TinyMatrix<double,2>, TinyMatrix<double,2>>
+// Face::computeMetricDerivatives() const
+// {
+//     // Collect available neighbors and their UVs
+//     struct Neighbor {
+//         TinyMatrix<double,2> metric;
+//         double du, dv;
+//         double weight;
+//     };
+//     std::vector<Neighbor> neighbors;
+
+//     const TinyMatrix<double,2> a0 = computeMetric();
+//     const double u0 = m_coordinates(0), v0 = m_coordinates(1);
+
+//     for (int ni = 0; ni < 3; ++ni) {
+//         if (!m_faces(ni)) continue;
+//         TinyMatrix<double,2> aj = m_faces(ni)->computeMetric();
+//         double uj = m_faces(ni)->coordinates()(0);
+//         double vj = m_faces(ni)->coordinates()(1);
+
+//         double du = uj - u0;
+//         double dv = vj - v0;
+//         double dist2 = du*du + dv*dv;
+//         if (dist2 < 1e-12) continue;
+
+//         // Weight: inverse squared distance (safe, regularizes for closer neighbors)
+//         double w = 1.0 / dist2;
+
+//         neighbors.push_back({aj, du, dv, w});
+//     }
+
+//     // If no neighbors, return zero
+//     if (neighbors.empty())
+//         return {TinyMatrix<double,2>(), TinyMatrix<double,2>()};
+
+//     // Least-squares: Solve W*Δa = W*[du, dv] * [da_du; da_dv]
+//     // For each metric component, solve independently (since TinyMatrix is small)
+
+//     // Each metric is symmetric 2x2, we can unroll as [a00, a01, a11]
+//     // We'll fit each component separately
+
+//     TinyMatrix<double,2> da_du, da_dv;
+//     for (int m=0; m<2; ++m) for (int n=0; n<=m; ++n) { // (0,0), (0,1), (1,1)
+//         // Set up least-squares
+//         double Sww = 0, Swu = 0, Swv = 0, Swuu = 0, Swvv = 0, Swuv = 0;
+//         double Swa = 0, Swau = 0, Swav = 0;
+
+//         for (const auto& N : neighbors) {
+//             double da = N.metric(m,n) - a0(m,n);
+//             double w = N.weight;
+//             Sww  += w;
+//             Swu  += w * N.du;
+//             Swv  += w * N.dv;
+//             Swuu += w * N.du * N.du;
+//             Swvv += w * N.dv * N.dv;
+//             Swuv += w * N.du * N.dv;
+//             Swa  += w * da;
+//             Swau += w * da * N.du;
+//             Swav += w * da * N.dv;
+//         }
+
+//         // Build 2x2 system:
+//         // [Swuu  Swuv][X] = [Swau]
+//         // [Swuv  Swvv][Y]   [Swav]
+//         double det = Swuu*Swvv - Swuv*Swuv;
+//         double x = 0, y = 0;
+//         if (fabs(det) > 1e-14) {
+//             x = ( Swau*Swvv - Swav*Swuv) / det;
+//             y = (Swuu*Swav - Swuv*Swau) / det;
+//         }
+//         // Place into the output derivatives
+//         da_du(m,n) = x;
+//         da_dv(m,n) = y;
+//         if (m != n) {
+//             da_du(n,m) = x;
+//             da_dv(n,m) = y;
+//         }
+//     }
+//     return {da_du, da_dv};
+// }
+
 std::pair<TinyMatrix<double,2>, TinyMatrix<double,2>>
 Face::computeMetricDerivatives() const
 {
-    // Collect available neighbors and their UVs
-    struct Neighbor {
-        TinyMatrix<double,2> metric;
-        double du, dv;
-        double weight;
+    TinyVector<double,2> uv0;
+    uv0(0) = m_coordinates(0);
+    uv0(1) = m_coordinates(1);
+
+    TinyMatrix<double,2> a0 = computeMetric();
+    // std::cout << "[DEBUG] a = " << a0 << std::endl;
+
+
+    struct Entry {
+        TinyVector<double,2> duv;  // normalized UV direction
+        TinyMatrix<double,2> Da;   // directional derivative of metric
     };
-    std::vector<Neighbor> neighbors;
 
-    const TinyMatrix<double,2> a0 = computeMetric();
-    const double u0 = m_coordinates(0), v0 = m_coordinates(1);
+    std::vector<Entry> entries;
 
-    for (int ni = 0; ni < 3; ++ni) {
-        if (!m_faces(ni)) continue;
-        TinyMatrix<double,2> aj = m_faces(ni)->computeMetric();
-        double uj = m_faces(ni)->coordinates()(0);
-        double vj = m_faces(ni)->coordinates()(1);
+    for (int i = 0; i < 3; ++i) {
+        Face* f = m_faces(i);
+        if (!f) continue;
 
-        double du = uj - u0;
-        double dv = vj - v0;
-        double dist2 = du*du + dv*dv;
-        if (dist2 < 1e-12) continue;
+        // UV direction
+        TinyVector<double,2> uv_i;
+        uv_i(0) = f->coordinates()(0);
+        uv_i(1) = f->coordinates()(1);
 
-        // Weight: inverse squared distance (safe, regularizes for closer neighbors)
-        double w = 1.0 / dist2;
+        TinyVector<double,2> duv = uv_i - uv0;
+        double norm = std::sqrt(duv(0)*duv(0) + duv(1)*duv(1));
+        if (norm < 1e-6) continue;
 
-        neighbors.push_back({aj, du, dv, w});
+        // Normalize manually
+        TinyVector<double,2> duv_norm;
+        duv_norm(0) = duv(0) / norm;
+        duv_norm(1) = duv(1) / norm;
+
+        // Distance in 3D
+        TinyVector<double,3> p0 = position();
+        TinyVector<double,3> pi = f->position();
+        TinyVector<double,3> dp = pi - p0;
+        double dist = std::sqrt(dp(0)*dp(0) + dp(1)*dp(1) + dp(2)*dp(2));
+        if (dist < 1e-6) continue;
+
+        // Directional derivative estimate
+        TinyMatrix<double,2> Da = f->computeMetric() - a0;
+        for (int r = 0; r < 2; ++r)
+            for (int c = 0; c < 2; ++c)
+                Da(r, c) = Da(r, c) / dist;
+
+        entries.push_back({duv_norm, Da});
     }
 
-    // If no neighbors, return zero
-    if (neighbors.empty())
+    if (entries.size() < 2)
         return {TinyMatrix<double,2>(), TinyMatrix<double,2>()};
 
-    // Least-squares: Solve W*Δa = W*[du, dv] * [da_du; da_dv]
-    // For each metric component, solve independently (since TinyMatrix is small)
-
-    // Each metric is symmetric 2x2, we can unroll as [a00, a01, a11]
-    // We'll fit each component separately
+    // Weighted average: weights normalized
+    double weight_sum = 0.0;
+    for (const auto& e : entries)
+        weight_sum += e.duv(0)*e.duv(0) + e.duv(1)*e.duv(1);
 
     TinyMatrix<double,2> da_du, da_dv;
-    for (int m=0; m<2; ++m) for (int n=0; n<=m; ++n) { // (0,0), (0,1), (1,1)
-        // Set up least-squares
-        double Sww = 0, Swu = 0, Swv = 0, Swuu = 0, Swvv = 0, Swuv = 0;
-        double Swa = 0, Swau = 0, Swav = 0;
+    da_du = TinyMatrix<double,2>();
+    da_dv = TinyMatrix<double,2>();
 
-        for (const auto& N : neighbors) {
-            double da = N.metric(m,n) - a0(m,n);
-            double w = N.weight;
-            Sww  += w;
-            Swu  += w * N.du;
-            Swv  += w * N.dv;
-            Swuu += w * N.du * N.du;
-            Swvv += w * N.dv * N.dv;
-            Swuv += w * N.du * N.dv;
-            Swa  += w * da;
-            Swau += w * da * N.du;
-            Swav += w * da * N.dv;
-        }
+    for (const auto& e : entries) {
+        double u = e.duv(0);
+        double v = e.duv(1);
+        double w = (u*u + v*v) / weight_sum;
 
-        // Build 2x2 system:
-        // [Swuu  Swuv][X] = [Swau]
-        // [Swuv  Swvv][Y]   [Swav]
-        double det = Swuu*Swvv - Swuv*Swuv;
-        double x = 0, y = 0;
-        if (fabs(det) > 1e-14) {
-            x = ( Swau*Swvv - Swav*Swuv) / det;
-            y = (Swuu*Swav - Swuv*Swau) / det;
-        }
-        // Place into the output derivatives
-        da_du(m,n) = x;
-        da_dv(m,n) = y;
-        if (m != n) {
-            da_du(n,m) = x;
-            da_dv(n,m) = y;
-        }
+        for (int r = 0; r < 2; ++r)
+            for (int c = 0; c < 2; ++c) {
+                da_du(r, c) += w * u * e.Da(r, c);
+                da_dv(r, c) += w * v * e.Da(r, c);
+            }
     }
+	// std::cout << "[DEBUG] ∂a/∂u = " << da_du << "\n";
+	// std::cout << "[DEBUG] ∂a/∂v = " << da_dv << "\n";
+
+
     return {da_du, da_dv};
 }
 
 
 /* ============================================================================== */
 /* Calculate the second fundamental form */
+// TinyVector<double,3> Face::LMN() const
+// {
+//     // collect all non‐NULL nodes
+//     std::vector<int> valid;
+//     for(int i=0; i<6; ++i)
+//         if(m_nodes(i)) valid.push_back(i);
+
+//     if(valid.size()<3)
+//         return TinyVector<double,3>(); // not enough to fit
+
+//     // face center and normal
+//     auto  P0 = position();
+//     auto  n0 = calculateUnitNormal();
+
+//     // build least squares: fit z ≈ L x^2 + 2M x y + N y^2
+//     const int Np = valid.size();
+//     std::vector<std::array<double,3>> B(Np);
+//     std::vector<double>                 rhs(Np);
+//     for(int k=0; k<Np; ++k){
+//         int idx = valid[k];
+//         TinyVector<double,2> c = (idx<3
+//             ? m_nodes(idx)->coordinates() - m_coordinates
+//             : (idx==3? m_nodeconnector4
+//               : idx==4? m_nodeconnector5
+//                        : m_nodeconnector6));
+//         B[k][0] = c(0)*c(0);
+//         B[k][1] = c(0)*c(1);
+//         B[k][2] = c(1)*c(1);
+//         rhs[k]  = innerProduct(m_nodes(idx)->position() - P0, n0);
+//     }
+
+//     // form normal equations BTB x = BTrhs
+//     TinyMatrix<double,3> BTB;
+//     TinyVector<double,3> BTrhs;
+//     for(int i=0;i<3;++i){
+//       BTrhs(i)=0; 
+//       for(int j=0;j<3;++j) BTB(i,j)=0;
+//       for(int k=0;k<Np;++k){
+//         BTrhs(i) += B[k][i]*rhs[k];
+//         for(int j=i;j<3;++j){
+//           BTB(i,j) += B[k][i]*B[k][j];
+//           BTB(j,i)  = BTB(i,j);
+//         }
+//       }
+//     }
+
+//     TinyVector<int,3> piv;
+//     auto BTBcopy = BTB;
+//     luDecompose(BTBcopy,piv);
+//     return luSolve(BTBcopy,piv,BTrhs);
+// }
+
+/* ============================================================================== */
+/* ============================================================================== */
+/* Calculate the second fundamental form */
+/* ============================================================================== */
+/* Calculate the second fundamental form, handling full vs. partial neighbors */
 TinyVector<double,3> Face::LMN() const
 {
-	/* Save the position of the Face */
-	TinyVector<double,3> my_position = position();
-	TinyVector<double,3> unitnormal = calculateUnitNormal();
-	TinyVector<double,6> rhs;
-	for (int nodeindex=0; nodeindex<6; nodeindex++)
-	{
-		if (m_nodes(nodeindex) != NULL)
-		{
-			TinyVector<double,3> dr = m_nodes(nodeindex)->position() - my_position;
-			rhs(nodeindex) = innerProduct(dr,unitnormal);
-		}
-		else
-		{
-			const TinyVector<double,2>  *ptr = NULL;
-			if (nodeindex==3)      ptr = &m_nodeconnector4;
-			else if (nodeindex==4) ptr = &m_nodeconnector5;
-			else                   ptr = &m_nodeconnector6;
+    // 1) check if *all* 6 m_nodes are non‐NULL ⇒ use your original 6×6 solve
+    bool haveAll = true;
+    for(int i = 0; i < 6; ++i){
+        if (!m_nodes(i)) { haveAll = false; break; }
+    }
+    if (haveAll) {
+        // — exactly your original code —
+        TinyVector<double,3> P0 = position();
+        TinyVector<double,3> n0 = calculateUnitNormal();
+        TinyVector<double,6> rhs;
+        for (int i = 0; i < 6; ++i) {
+            TinyVector<double,3> dr = m_nodes(i)->position() - P0;
+            rhs(i) = innerProduct(dr, n0);
+        }
+        TinyVector<double,6> bcomp = luSolve(m_Bmatrix, m_Bpivot, rhs);
+        TinyVector<double,3> Lmn;
+        Lmn(0) = bcomp(3);
+        Lmn(1) = bcomp(4);
+        Lmn(2) = bcomp(5);
+        return Lmn;
+    }
 
-			rhs(nodeindex) = m_bbar(0,0) * (*ptr)(0) * (*ptr)(0) +
-				2*m_bbar(0,1)* (*ptr)(0) * (*ptr)(1) +
-				m_bbar(1,1)* (*ptr)(1) * (*ptr)(1);
-		}
-	}
+    // 2) otherwise: fall back to a 3×3 least‐squares on [x², 2xy, y²]
+    struct Sample { double x,y,h; };
+    std::vector<Sample> samp;
+    auto P0 = position();
+    auto n0 = calculateUnitNormal();
 
-	TinyVector<double,6> bcomp = luSolve(m_Bmatrix, m_Bpivot, rhs);
-	TinyVector<double,3> b;
-	b(0) = bcomp(3);
-	b(1) = bcomp(4);
-	b(2) = bcomp(5);
-	return b;
+    // collect only the real nodes
+    for(int i=0; i<6; ++i){
+        if (!m_nodes(i)) continue;
+        TinyVector<double,2> c = (i<3
+          ? m_nodes(i)->coordinates() - m_coordinates
+          : (i==3 ? m_nodeconnector4
+           : i==4 ? m_nodeconnector5
+                  : m_nodeconnector6));
+        double h = innerProduct(m_nodes(i)->position() - P0, n0);
+        samp.push_back({ c(0), c(1), h });
+    }
+    // need at least 3 points to fit 3 unknowns (L,2M,N)
+    if (samp.size() < 3)
+        return TinyVector<double,3>();  
+
+    // build the 3×3 normal equations A·c = b
+    TinyMatrix<double,3> A;  A.setToZero();
+    TinyVector<double,3> b;  b.setToZero();
+
+    for(auto &s : samp){
+        double B0 = s.x*s.x;
+        double B1 =     2*s.x*s.y;
+        double B2 = s.y*s.y;
+        // accumulate A
+        A(0,0) += B0*B0;  A(0,1) += B0*B1;  A(0,2) += B0*B2;
+                          A(1,1) += B1*B1;  A(1,2) += B1*B2;
+                                             A(2,2) += B2*B2;
+        // accumulate rhs
+        b(0) += B0 * s.h;
+        b(1) += B1 * s.h;
+        b(2) += B2 * s.h;
+    }
+    // symmetrize
+    A(1,0) = A(0,1);
+    A(2,0) = A(0,2);
+    A(2,1) = A(1,2);
+
+    // solve 3×3
+    TinyVector<int,3> piv;
+    auto Ac = A;
+    luDecompose(Ac, piv);
+    TinyVector<double,3> c3 = luSolve(Ac, piv, b);
+
+    // extract L, M, N
+    TinyVector<double,3> Lmn;
+    Lmn(0) = c3(0);        // L
+    Lmn(1) = c3(1) * 0.5;  // 2M → M
+    Lmn(2) = c3(2);        // N
+    return Lmn;
 }
 
 /* ============================================================================== */
@@ -938,9 +1157,12 @@ void NonEuclideanShell::setParameters(double (*f_thickness)(double, double),
 									  TinyMatrix<double,2> (*f_bbar)(double, double),
 									  TinyVector<double,3> (*f_Pos0)(double, double),
 									  TinyMatrix<TinyMatrix<double,2>,2> (*f_gammabar)(double, double),
+									  double eta,
                                       double lambdaG,
                                       double muG)
-{
+{	
+	m_eta = eta;
+
 	for (int i=0; i<m_faces.length(); i++)
 	{
 		double u         = m_faces(i)->coordinates(0);
@@ -952,7 +1174,7 @@ void NonEuclideanShell::setParameters(double (*f_thickness)(double, double),
 		TinyMatrix<double,2> bbar      = f_bbar(u,v);
         TinyMatrix<TinyMatrix<double,2>,2> gammabar = f_gammabar(u, v);
 
-		m_faces(i)->initialize(thickness, lambda, mu, abar, bbar, gammabar, lambdaG, muG);
+		m_faces(i)->initialize(thickness, lambda, mu, abar, bbar, gammabar, eta, lambdaG, muG);
     }
 
     // --- initialize node positions (unchanged) ---
@@ -980,11 +1202,15 @@ void NonEuclideanShell::setParameters(double (*f_thickness)(double, double),
 }
 /* ============================================================================== */
 /* set the adjustment parameters */
-void NonEuclideanShell::setAdjust(double a_adjust1, double a_adjust2)
+// void NonEuclideanShell::setAdjust(double a_adjust1, double a_adjust2)
+void NonEuclideanShell::setAdjust(double a_adjust1, double a_adjust2, double a_adjust3)
+
 {
 	for (int i=0; i<m_faces.length(); i++)
 	{
-		m_faces(i)->setAdjust(a_adjust1, a_adjust2);
+		// m_faces(i)->setAdjust(a_adjust1, a_adjust2);
+		m_faces(i)->setAdjust(a_adjust1, a_adjust2, a_adjust3);
+
 	}
 }
 
@@ -1092,6 +1318,25 @@ double NonEuclideanShell::connectionEnergy() const
 
     return energy;
 }
+// double NonEuclideanShell::connectionEnergy() const {
+//     double sum = 0.0;
+//     double maxEnergy = 0.0;
+//     int maxIndex = -1;
+
+//     for (int i = 0; i < m_faces.length(); i++) {
+//         double e = m_faces(i)->connectionEnergy();
+//         sum += e;
+//         if (e > maxEnergy) {
+//             maxEnergy = e;
+//             maxIndex = i;
+//         }
+//     }
+
+//     std::cout << "[DEBUG] Max connection energy = " << maxEnergy
+//               << " at face index " << maxIndex << std::endl;
+
+//     return sum;
+// }
 
 /* ============================================================================== */
 /* Calculate the total energy */
