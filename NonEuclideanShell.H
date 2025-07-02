@@ -280,6 +280,7 @@ class NonEuclideanShell
 	{
 	public:
 		void checkNodePositions() const;
+	    void cotangentSmooth(double baseAlpha);
 
 		const Vector<Face*>& getFaces() const;
 

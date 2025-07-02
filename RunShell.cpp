@@ -455,7 +455,7 @@ int main() {
 		// 	std::cout << "[DEBUG] Initial eta = " << eta << std::endl;
 		// 	std::cout << "[DEBUG] Initial adjustParamEta = " << adjustParamEta << std::endl;
 		// }
-		lattice.setAdjust(adjustParamThickness, adjustParamMetric, adjustParamEta);
+		// lattice.setAdjust(adjustParamThickness, adjustParamMetric, adjustParamEta);
 
 
 		
@@ -507,6 +507,8 @@ int main() {
 		// lattice.setPositionVector(currentX);
 		
 		// }
+		
+
 		if (status)
 		{
 			if (((ThicknessAdjust == 1.0) && (MetricAdjust == 1.0)) || ((5.0 * iter / NumberOfLoops) > 1.0)) /*Allow exit only after 1/5 of maximum number of iterations (if adjusted)*/
@@ -519,11 +521,14 @@ int main() {
 			}
 			
 		}
-		// // 		// — pull the optimizer’s current x-vector back into the lattice —
-		// {
-		// 	double* currentX = gsl_vector_ptr(optimizer->x, 0);
-		// 	lattice.setPositionVector(currentX);
-		// }
+		    // — pull the optimizer’s current x-vector back into the lattice —
+		{
+			double* currentX = gsl_vector_ptr(optimizer->x, 0);
+			lattice.setPositionVector(currentX);
+		}
+
+		
+
 
 		/* check the size of the gradient */
 		status = gsl_multimin_test_gradient(optimizer->gradient, 1e-6);

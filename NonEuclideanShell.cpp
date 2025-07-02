@@ -256,7 +256,7 @@ double Face::connectionEnergy() const {
 
 	double factor = eta_eff * eta_eff
 	              * m_thickness * m_adjust1
-	              * invAdjust2_6;
+	              * invAdjust2_6 * m_area;
 
 	return γ * factor;
 }
@@ -406,38 +406,74 @@ double Face::connectionEnergyContentDensity() const {
 
     // Perform the contraction:
     // W_conn = B^{μναβ} * (Γ^λ_{μν} - 𝛤̄^λ_{μν}) * (Γ^ρ_{αβ} - 𝛤̄^ρ_{αβ}) * 𝑎̄_{λρ}
-    double result = 0.0;
-    for (int mu = 0; mu < 2; ++mu)
-    for (int nu = 0; nu < 2; ++nu)
-    for (int alpha = 0; alpha < 2; ++alpha)
-    for (int beta = 0; beta < 2; ++beta)
-    for (int lambda = 0; lambda < 2; ++lambda)
-    for (int rho = 0; rho < 2; ++rho) {
-        double dGamma1 = Gamma(lambda, mu)(0, nu) - GammaBar(lambda, mu)(0, nu);
-        double dGamma2 = Gamma(rho, alpha)(0, beta) - GammaBar(rho, alpha)(0, beta);
-        result += B(mu, nu, alpha, beta) * dGamma1 * dGamma2 * abarAdj(lambda, rho);
+	// TODO change
+    // double result = 0.0;
+    // for (int mu = 0; mu < 2; ++mu)
+    // for (int nu = 0; nu < 2; ++nu)
+    // for (int alpha = 0; alpha < 2; ++alpha)
+    // for (int beta = 0; beta < 2; ++beta)
+    // for (int lambda = 0; lambda < 2; ++lambda)
+    // for (int rho = 0; rho < 2; ++rho) {
+    //     double dGamma1 = Gamma(lambda, mu)(0, nu) - GammaBar(lambda, mu)(0, nu);
+    //     double dGamma2 = Gamma(rho, alpha)(0, beta) - GammaBar(rho, alpha)(0, beta);
+    //     result += B(mu, nu, alpha, beta) * dGamma1 * dGamma2 * abarAdj(lambda, rho);
+    // }
+	
+	double result = 0.0;
+	bool printedNeg = false;
+
+	for (int μ = 0; μ < 2; ++μ) {
+	for (int ν = 0; ν < 2; ++ν) {
+		for (int α = 0; α < 2; ++α) {
+		for (int β = 0; β < 2; ++β) {
+			for (int λ = 0; λ < 2; ++λ) {
+			for (int ρ = 0; ρ < 2; ++ρ) {
+				double d1      = Gamma(λ,μ)(0,ν) - GammaBar(λ,μ)(0,ν);
+				double d2      = Gamma(ρ,α)(0,β) - GammaBar(ρ,α)(0,β);
+				double contrib = B(μ,ν,α,β) * d1 * d2 * abarAdj(λ,ρ);
+
+				// if this single term is negative, print it once
+				// if (!printedNeg && contrib < 0.0) {
+				// std::cerr
+				// 	<< "[DBG] NEG contrib at ("
+				// 	<< μ<<","<<ν<<","<<α<<","<<β<<","<<λ<<","<<ρ
+				// 	<< ") = " << contrib << "\n";
+				// printedNeg = true;
+				
+
+				result += contrib;
+			}
+			}
+		}
+		}
+	}
+	}
+	// after the loops:
+	// std::cerr << "[DBG] full raw_result = " << result << "\n";
+
+	// only print final if still negative
+	if (result < 0.0) {
+	std::cerr << "[DBG] FINAL raw_result = " << result << "\n";
+	}
+
+
+
+
+
+    if (result < 0.0) {
+        std::cerr
+          << "[DBG] NEGATIVE raw_result = " << result
+          << ", m_thickness=" << m_thickness
+          << ", m_eta="      << m_eta
+          << ", m_adjust3="  << m_adjust3
+          << "\n";
     }
-	// --- debug: dump every Gamma^k_{ij} vs. Gammabar^k_{ij} ---
-// for (int k = 0; k < 2; ++k) {
-//   for (int i = 0; i < 2; ++i) {
-//     for (int j = 0; j < 2; ++j) {
-//       double G    = Gamma(k,i)(0, j);
-//       double Gbar = m_gammabar(k,i)(0, j);
-//       double Δ    = G - Gbar;
-//       std::cout 
-//         << "[DEBUG] Γ^" << k << "_{" << i << j << "} = " << G
-//         << ", 𝛤̄^"  << k << "_{" << i << j << "} = " << Gbar
-//         << ", Δ = "    << Δ << "\n";
-//     }
-//   }
-// }
-
-
-
     // Final result: h * η² * adjust3 * contraction
-    return 0.5 * m_thickness * m_eta * m_eta * m_adjust3 * result;
-}
 
+	// double factor  = 0.5 * m_thickness * m_eta * m_eta * m_adjust3 * result;
+
+    return result;
+}
 /* ============================================================================== */
 /* Calculate the first fundamental form */
 TinyVector<double,3> Face::EFG() const
@@ -1251,6 +1287,7 @@ void NonEuclideanShell::initializeForce()
 	for (int i=0; i<m_nodes.length(); i++)
 		m_nodes(i)->force().setToZero();
 }
+/* ============================================================================== *
 
 /* ============================================================================== */
 /* Calculate the stretching energy */
