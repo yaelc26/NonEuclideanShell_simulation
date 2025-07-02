@@ -19,13 +19,13 @@ def make_flag_func(umin, umax, vmin, vmax, tolu=0.05, tolv=0):
         if u < umin + tolu or u > umax - tolu or \
            v < vmin + tolv or v > vmax - tolv:
             return -1
-        return -2
+        else:
+            return -2
     return flag
 
 
 def create_input_files(sim_name,
                        output_dir,
-                       domain_type,
                        domain_params,
                        max_area=0.001,
                        tols=(0,0)):
@@ -38,20 +38,10 @@ def create_input_files(sim_name,
     """
     os.makedirs(output_dir, exist_ok=True)
     # 1) build boundary
-    if domain_type=='rectangle':
-        umin,umax,vmin,vmax = domain_params
-        pts    = [(umin,vmin),(umax,vmin),(umax,vmax),(umin,vmax)]
-        facets = [(i,(i+1)%4) for i in range(4)]
-    elif domain_type=='circle':
-        cx,cy,r = domain_params
-        angles  = np.linspace(0,2*np.pi,32,endpoint=False)
-        pts     = [(cx + r*np.cos(a), cy + r*np.sin(a)) for a in angles]
-        facets  = [(i,(i+1)%len(pts)) for i in range(len(pts))]
-    elif domain_type=='polygon':
-        pts     = list(domain_params)
-        facets  = [(i,(i+1)%len(pts)) for i in range(len(pts))]
-    else:
-        raise ValueError(domain_type)
+    
+    umin,umax,vmin,vmax = domain_params
+    pts    = [(umin,vmin),(umax,vmin),(umax,vmax),(umin,vmax)]
+    facets = [(i,(i+1)%4) for i in range(4)]
 
     # 2) refine
     info = MeshInfo()
@@ -78,7 +68,7 @@ def create_input_files(sim_name,
     V[1:3, :] = P_raw.T
     # apply your flag_func to each (u,v)
     tolu, tolv = tols
-    flag_func    = make_flag_func(umin, umax, vmin, vmax, tolu=tolu, tolv=tolv)
+    flag_func = make_flag_func(umin, umax, vmin, vmax, tolu=tolu, tolv=tolv)
 
     V[3, :] = [flag_func(u, v) for u, v in P_raw]
 
@@ -165,8 +155,7 @@ def make_in_file(params, output_dir, sim_name):
                    str(params['E']),
                    str(params['nu']) ])
     lines.extend(str(x) for x in params['pos0'])
-    lines.extend([ str(params['lambdaG']),
-                   str(params['muG']) ])
+    lines.extend([str(params['eta']), str(params['lambdaG']), str(params['muG']) ])
 
     # γ‐table
     for k in (0,1):
@@ -178,6 +167,7 @@ def make_in_file(params, output_dir, sim_name):
     lines.extend([
         str(params['thickness_adjust']),
         str(params['metric_adjust']),
+        str(params['connection_adjust']),
         str(int(params['restart']))
     ])
 
@@ -215,26 +205,49 @@ def plot_uv_surface(x_func, y_func, z_func, umin, umax, vmin, vmax, nu=50, nv=50
     return ax
 
 
+# def func_to_matlab_str(func):
+#     """
+#     Turn a lambda like `lambda u,v: np.sin(u)*np.cos(v)` or `lambda u,v: u**2`
+#     into a MATLAB/Octave‐style string: 'sin(u)*cos(v)' or 'u^2', etc.
+#     """
+#     # grab the RHS of the lambda
+#     src = inspect.getsource(func).strip()
+#     m = re.match(r'.*lambda\s*[\w, ]*:\s*(.*)', src)
+#     if not m:
+#         raise ValueError("Expected a one-liner lambda(u,v): …")
+#     expr = m.group(1)
+
+#     # 3) strip off the "np." (or "numpy.") prefix everywhere
+#     expr = re.sub(r'\b(?:np|numpy)\.([A-Za-z_]\w*)', r'\1', expr)
+
+#     # 4) sympify with *all* Sympy names available
+#     sym = sp.sympify(expr, locals={**_sympy_namespace, 'u': u, 'v': v})
+
+#     # 5) print out Octave/MATLAB code
+#     return octave_code(sym)
 def func_to_matlab_str(func):
     """
     Turn a lambda like `lambda u,v: np.sin(u)*np.cos(v)` or `lambda u,v: u**2`
-    into a MATLAB/Octave‐style string: 'sin(u)*cos(v)' or 'u^2', etc.
+    into a MATLAB‐style string: 'sin(u)*cos(v)' or 'u^2', etc.
     """
-    # grab the RHS of the lambda
+    # 1) grab the RHS of the lambda
     src = inspect.getsource(func).strip()
-    m = re.match(r'.*lambda\s*[\w, ]*:\s*(.*)', src)
+    m   = re.match(r'.*lambda\s*[\w, ]*:\s*(.*)', src)
     if not m:
         raise ValueError("Expected a one-liner lambda(u,v): …")
     expr = m.group(1)
 
-    # 3) strip off the "np." (or "numpy.") prefix everywhere
+    # 2) strip numpy prefixes
     expr = re.sub(r'\b(?:np|numpy)\.([A-Za-z_]\w*)', r'\1', expr)
 
-    # 4) sympify with *all* Sympy names available
+    # 3) sympify with u,v in scope
     sym = sp.sympify(expr, locals={**_sympy_namespace, 'u': u, 'v': v})
 
-    # 5) print out Octave/MATLAB code
-    return octave_code(sym)
+    # 4) use Python‐printer, then tweak **→^ for MATLAB
+    code = str(sym)
+    code = code.replace('**', '^')
+    return code
+
 
 def calc_Gamma(a, u, v):
     """
