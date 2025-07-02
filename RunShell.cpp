@@ -455,7 +455,7 @@ int main() {
 		// 	std::cout << "[DEBUG] Initial eta = " << eta << std::endl;
 		// 	std::cout << "[DEBUG] Initial adjustParamEta = " << adjustParamEta << std::endl;
 		// }
-		// lattice.setAdjust(adjustParamThickness, adjustParamMetric, adjustParamEta);
+		lattice.setAdjust(adjustParamThickness, adjustParamMetric, adjustParamEta);
 
 
 		
@@ -546,12 +546,12 @@ int main() {
 		{
 		/* print the current energy and thickness */
 			char *space = (char*)(" ");
-			// double Es = lattice.stretchingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
-			// double Eb = lattice.bendingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
-			// double Eg = lattice.connectionEnergy()  * pow(adjustParamThickness * adjustParamMetric, 0);
-			double Es = lattice.stretchingEnergy();
-			double Eb = lattice.bendingEnergy();
-			double Eg = lattice.connectionEnergy();
+			double Es = lattice.stretchingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
+			double Eb = lattice.bendingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
+			double Eg = lattice.connectionEnergy()  * pow(adjustParamThickness * adjustParamMetric, 0);
+			// double Es = lattice.stretchingEnergy();
+			// double Eb = lattice.bendingEnergy();
+			// double Eg = lattice.connectionEnergy();
     		double E  = Es + Eb + Eg;
 			energyFileHandle.write(iter);
 			energyFileHandle.write(space);
